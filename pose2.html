@@ -259,13 +259,13 @@
           </select>
         </label>
         <span style="flex:1"></span>
-        <button id="cmpMark" class="ghost" disabled>Отметить старт A/B</button>
-        <span id="markInfo" class="mono"></span>
+        <button id="cmpMark" class="ghost" disabled hidden>Отметить старт A/B</button>
+        <span id="markInfo" class="mono" hidden></span>
         <span style="flex:1"></span>
         <button id="cmpPreview" class="ghost" disabled>Просмотр</button>
         <button id="cmpPreviewReplay" class="ghost" hidden>Повторить заново</button>
         <button id="cmpGo" disabled>Сравнить</button>
-        <button id="cmpStop" class="ghost" disabled>Стоп</button>
+        <button id="cmpStop" class="ghost" disabled hidden>Стоп</button>
       </div>
 
       <div id="progC"><div id="progFillC"></div></div>
@@ -667,7 +667,9 @@ $("go").onclick = async () => {
   frames = 0; t0 = performance.now(); lastTs = -1; lastTime = -1;
   smoothPoses = []; running = true;
   $("stop").disabled = false;
-  v.currentTime = 0;
+  if (v.currentTime <= 0 || v.currentTime >= (v.duration || Infinity) - 0.05){
+    v.currentTime = 0;
+  }
   try { await v.play(); } catch(err){ say(`Видео не запустилось: ${err.message}`, true); }
   loop();
 };
@@ -1218,7 +1220,7 @@ $("cmpGo").onclick = async () => {
   cmp.lastTimeA = -1; cmp.lastTimeB = -1;
   $("csvBtn").disabled = true;
   buildCharts();
-  cmp.running = true; $("cmpStop").disabled = false;
+  cmp.running = true; $("cmpStop").disabled = false; $("cmpStop").hidden = false;
   vA.currentTime = cmp.markA;
   if (!camOn) vB.currentTime = cmp.markB;
   let prepSec = camOn ? (Number($("cnt").value) || 0) : 0;
@@ -1250,6 +1252,7 @@ function cmpStop(){
   vA.pause(); vB.pause();
   $("cmpGo").disabled = !(hasA && (hasB || camOn));
   $("cmpStop").disabled = true;
+  $("cmpStop").hidden = true;
   if (cmp.samples.length){
     cmpUpdateUI(); drawCharts();
     $("csvBtn").disabled = false;
@@ -1267,17 +1270,21 @@ $("cmpStop").onclick = cmpStop;
 function previewEnd(){
   vA.pause();
   cmp.preview = false;
+  $("cmpPreview").hidden = true;
   $("cmpPreview").textContent = "Просмотр";
   $("cmpPreviewReplay").hidden = false;
+  $("cmpStop").hidden = true;
   syncCmpBtns();
-  say2("Просмотр закончен. Можно повторить заново или начать «Сравнить».");
+  say2("Просмотр закончен. Можно «Повторить заново» или начать «Сравнить».");
 }
 function stopPreview(){
   if (!cmp.preview) return;
   cmp.preview = false;
   vA.pause();
-  $("cmpPreview").textContent = "Просмотр";
-  $("cmpPreviewReplay").hidden = false;
+  $("cmpPreview").hidden = false;
+  $("cmpPreview").textContent = "Возобновить";
+  $("cmpPreviewReplay").hidden = true;
+  $("cmpStop").hidden = true;
   syncCmpBtns();
 }
 function startPreview(){
@@ -1285,11 +1292,15 @@ function startPreview(){
   cmp.running = false;
   cmp.preview = true;
   vA.pause();
-  $("cmpPreview").textContent = "Стоп просмотра";
-  $("cmpPreviewReplay").hidden = true;
-  $("cmpGo").disabled = true; $("cmpMark").disabled = true; $("cmpStop").disabled = true;
-  vA.currentTime = cmp.markA;
-  vA.play().then(() => say2("Просмотр эталона — просто видео. По концу нажмите «Повторить заново»."))
+  $("cmpPreview").hidden = true;
+  $("cmpPreview").textContent = "Просмотр";
+  $("cmpPreviewReplay").hidden = false;
+  $("cmpGo").disabled = true; $("cmpMark").disabled = true; $("cmpStop").disabled = false;
+  $("cmpStop").hidden = false;
+  if (vA.currentTime <= 0 || vA.currentTime >= (vA.duration || Infinity) - 0.05){
+    vA.currentTime = cmp.markA;
+  }
+  vA.play().then(() => say2("Просмотр эталона — только видео. Остановить можно кнопкой «Стоп»."))
             .catch(err => say2(`Просмотр не запустился: ${err.message}`, true));
   previewTick();
 }
@@ -1299,15 +1310,19 @@ function previewTick(){
   if (vA.ended){ previewEnd(); return; }
   requestAnimationFrame(previewTick);
 }
-$("cmpPreview").onclick = () => { cmp.preview ? stopPreview() : startPreview(); };
+$("cmpPreview").onclick = startPreview;
 vA.addEventListener("ended", () => { if (cmp.preview) previewEnd(); });
 $("cmpPreviewReplay").onclick = () => {
-  $("cmpPreviewReplay").hidden = true;
+  cmp.running = false;
+  cmp.preview = true;
+  vA.pause();
+  $("cmpPreview").hidden = true;
+  $("cmpPreview").textContent = "Просмотр";
+  $("cmpPreviewReplay").hidden = false;
+  $("cmpGo").disabled = true; $("cmpMark").disabled = true; $("cmpStop").disabled = false;
+  $("cmpStop").hidden = false;
   vA.currentTime = cmp.markA;
   vA.play().catch(err => say2(`Не запустилось: ${err.message}`, true));
-  cmp.preview = true;
-  $("cmpPreview").textContent = "Стоп просмотра";
-  $("cmpGo").disabled = true; $("cmpMark").disabled = true; $("cmpStop").disabled = true;
   previewTick();
 };
 
