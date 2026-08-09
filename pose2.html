@@ -736,8 +736,10 @@ const cmp = {
   samples:[], featSum:{}, featCnt:{}, bigSum:0, bigCnt:0,
   frames:0, t0:0, everyN:0, camTS:0,
   lastTimeA:-1, lastTimeB:-1, smoothA:[], smoothB:[],
-  tsA:-1, tsB:-1, failsA:0, failsB:0, fbA:false, fbB:false, aWin:{}
+  tsA:-1, tsB:-1, failsA:0, failsB:0, fbA:false, fbB:false, aWin:{},
+  warmUntil:0, shiftSum:0, shiftCnt:0, bHist:{}
 };
+try { window.__cmp = cmp; window.__camOn = () => camOn; } catch(_){}
 let actx = null;
 function beep(freq, dur){
   try {
@@ -916,11 +918,30 @@ function drawSkelC(cr, cw, ch, col, g, showDeg, vals){
 
 function cmpAddSample(va, vb){
   if (!va && !vb) return;
+  if (!camOn && performance.now() < cmp.warmUntil) return;
   va = va || {}; vb = vb || {};
   const thr = Number($("thr").value);
   const tA = vA.currentTime, tB = vB.currentTime;
-  const win = camOn ? 2.0 : 0.0;
-  const sm = { tA, tB, a:{}, b:{} };
+  const win = 2.0;
+  const sm = { tA, tB, a:{}, b:{}, s:{}, tA_:{}, moved:false };
+  const hB = (cmp.bHist = cmp.bHist || {});
+  let rangeSum = 0, rangeN = 0;
+  for (const f of FEATURES){
+    const kb = vb[f.key];
+    if (kb == null) continue;
+    (hB[f.key] = hB[f.key] || []).push([tB, kb]);
+    const h = hB[f.key];
+    while (h.length > 1 && h[h.length-1][0] - h[0][0] > 0.5) h.shift();
+    if (h.length > 60) h.shift();
+  }
+  for (const k in hB){
+    const h = hB[k];
+    if (h.length < 2) continue;
+    let mn = 1e9, mx = -1e9;
+    for (const [, v] of h){ if (v < mn) mn = v; if (v > mx) mx = v; }
+    rangeSum += mx - mn; rangeN++;
+  }
+  const moved = !rangeN || rangeSum / rangeN > 1.0;
   let any = false;
   for (const f of FEATURES){
     if (!featOn(f)) continue;
@@ -932,21 +953,59 @@ function cmpAddSample(va, vb){
       if (arr.length > 80) arr.shift();
     }
     const kb = vb[f.key];
-    let bestSim = null;
+    let bestSim = null, bestT = null;
     if (kb != null && arr.length){
-      let m = -Infinity;
-      for (const [, av] of arr) m = Math.max(m, Math.max(0, 1 - Math.abs(av - kb)/thr));
-      if (isFinite(m)) bestSim = m;
+      if (camOn){
+        const expT = tA - (cmp.curLagA || 0);
+        let bd = 1e9;
+        for (const [ta, av] of arr){
+          const d = Math.abs(ta - expT);
+          if (d < bd){ bd = d; bestT = ta; }
+        }
+        if (bestT != null && bd <= 0.35){
+          const av = arr.find(e => e[0] === bestT)[1];
+          bestSim = Math.max(0, 1 - Math.abs(av - kb)/thr);
+        } else bestT = null;
+      } else {
+        let m = -Infinity;
+        for (const [ta, av] of arr){
+          const s = Math.max(0, 1 - Math.abs(av - kb)/thr);
+          if (s > m){ m = s; bestT = ta; }
+        }
+        if (isFinite(m)) bestSim = m;
+        else bestT = null;
+      }
     }
     sm.a[f.key] = ka ?? null; sm.b[f.key] = kb ?? null;
+    sm.tA_[f.key] = bestT;
     if (bestSim != null){
       any = true;
-      cmp.featSum[f.key] = (cmp.featSum[f.key]||0) + bestSim;
-      cmp.featCnt[f.key] = (cmp.featCnt[f.key]||0) + 1;
-      cmp.bigSum += bestSim; cmp.bigCnt++;
+      sm.s[f.key] = bestSim;
+      if (moved){
+        cmp.featSum[f.key] = (cmp.featSum[f.key]||0) + bestSim;
+        cmp.featCnt[f.key] = (cmp.featCnt[f.key]||0) + 1;
+        cmp.bigSum += bestSim; cmp.bigCnt++;
+      }
     }
   }
-  if (any) cmp.samples.push(sm);
+  sm.moved = moved;
+  if (any){
+    cmp.samples.push(sm);
+    let lgA = 0, lnA = 0;
+    for (const f of FEATURES){
+      if (!featOn(f)) continue;
+      const ta = sm.tA_[f.key];
+      if (ta != null){ lgA += tA - ta; lnA++; }
+    }
+    if (camOn && lnA){
+      const lagSec = lgA / lnA;
+      cmp.curLagA = (cmp.curLagA || 0) * 0.7 + lagSec * 0.3;
+      sm.lag = lagSec;
+    } else {
+      sm.lag = tB - tA;
+    }
+    cmp.shiftSum += sm.lag; cmp.shiftCnt++;
+  }
 }
 
 function cmpUpdateUI(){
@@ -956,24 +1015,49 @@ function cmpUpdateUI(){
   const pct = durA ? Math.min(100, (last ? last.tA : 0) / durA * 100).toFixed(0) : 0;
   $("progFillC").style.width = pct + "%";
   const fps = cmp.frames ? (cmp.frames / ((performance.now()-cmp.t0)/1000)).toFixed(1) : "0";
+  const shift = cmp.shiftCnt ? (cmp.shiftSum / cmp.shiftCnt * 1000) : null;
+  const shiftTxt = shift == null ? "" : (shift >= 0 ? "+" : "−") + Math.abs(shift).toFixed(0) + " мс";
   $("statC").innerHTML = [
     `кадры <b>${n}</b>`,
     `A <b>${last ? last.tA.toFixed(1) : "0.0"} с</b>`,
     `B <b>${camOn ? "live" : (last ? last.tB.toFixed(1) : "0.0")} с</b>`,
+    `сдвиг <b>${shiftTxt || "—"}</b>`,
     `обработка <b>${fps}</b> кадр/с`
   ].map(h => `<span>${h}</span>`).join("");
-  const overall = cmp.bigCnt ? (cmp.bigSum / cmp.bigCnt * 100).toFixed(1) : null;
+  const LIVE = 120;
+  const winS = cmp.samples.slice(-LIVE);
+  const lSum = {}, lCnt = {};
+  let lBig = 0, lBc = 0, lMv = 0;
+  for (const sm of winS){
+    if (sm.moved) lMv++;
+    for (const k in sm.s){
+      lSum[k] = (lSum[k]||0) + sm.s[k];
+      lCnt[k] = (lCnt[k]||0) + 1;
+      lBig += sm.s[k]; lBc++;
+    }
+  }
+  const overall = lBc ? (lBig / lBc * 100).toFixed(1) : null;
+  const session = cmp.bigCnt ? (cmp.bigSum / cmp.bigCnt * 100).toFixed(1) : null;
   $("scoreBig").textContent = overall == null ? "—" : overall + "%";
-  $("scoreSub").textContent = overall == null ? "запустите сравнение" : `по ${cmp.bigCnt} замерам`;
+  $("scoreSub").textContent = overall == null
+      ? "запустите сравнение"
+      : `живой ~${LIVE} зам${session == null ? "" : ` · минимум ${cmp.bigCnt} зам ${session}%`}${lBc && lMv < winS.length ? ` · застыл ${winS.length - lMv} из ${winS.length}` : ""}`;
   let per = "";
   for (const f of FEATURES){
-    const cnt = cmp.featCnt[f.key] || 0;
-    const val = cnt ? Math.round(cmp.featSum[f.key]/cnt*100) : null;
+    const cnt = lCnt[f.key] || 0;
+    const val = cnt ? Math.round(lSum[f.key]/cnt*100) : null;
     const bar = val == null ? `<div class="fbar"></div>`
               : `<div class="fbar"><div style="width:${val}%"></div></div>`;
     per += `<div class="frow"><span>${f.name}</span>${bar}<b>${val == null ? "—" : val + "%"}</b><i>${cnt} ср.</i></div>`;
   }
   $("ffePer").innerHTML = per;
+  const blindA = [], blindB = [];
+  const vaNow = cmp.smoothA.length ? cmpFeatures(cmp.smoothA) : null;
+  const vbNow = cmp.smoothB.length ? cmpFeatures(cmp.smoothB) : null;
+  if (vaNow) for (const f of FEATURES) if (!featOn(f) || vaNow[f.key] == null) blindA.push(f.name);
+  if (vbNow) for (const f of FEATURES) if (!featOn(f) || vbNow[f.key] == null) blindB.push(f.name);
+  if (blindA.length) $("infoA").textContent = "⚠ не видно: " + blindA.join(", ");
+  if (blindB.length) $("infoB").textContent = "⚠ не видно: " + blindB.join(", ");
 }
 
 let chartCV = {};
@@ -1061,7 +1145,7 @@ function cmpTick(){
       cmp.lastTimeA = vA.currentTime;
       let ts = cmp.tsA < 0 ? Math.round(vA.currentTime * 1000)
                            : Math.max(cmp.tsA + 1, Math.round(vA.currentTime * 1000));
-      if (ts - cmp.tsA > 200 && cmp.tsA >= 0) cmp.smoothA = [];
+      if (ts - cmp.tsA > 500 && cmp.tsA >= 0) cmp.smoothA = [];
       cmp.tsA = ts;
       try {
         const fa = lmA.detectForVideo(vA, ts);
@@ -1080,7 +1164,7 @@ function cmpTick(){
       else {
         ts = cmp.tsB < 0 ? Math.round(vB.currentTime * 1000)
                          : Math.max(cmp.tsB + 1, Math.round(vB.currentTime * 1000));
-        if (ts - cmp.tsB > 200 && cmp.tsB >= 0) cmp.smoothB = [];
+        if (ts - cmp.tsB > 500 && cmp.tsB >= 0) cmp.smoothB = [];
         cmp.tsB = ts;
       }
       try {
@@ -1222,7 +1306,7 @@ $("cmpGo").onclick = async () => {
   try {
     await ensureMeta(vA); await ensureMeta(vB);
     if (!cvA.width || !cvB.width) throw new Error("нет метаданных видео");
-    const del = $("delegate").value;
+    const del = camOn ? "GPU" : $("delegate").value;
     say2(`загрузка модели (${del})…`);
     const prog = p => say2(`загрузка модели (${del})… ${Math.round(p * 100)}%`);
     try { lmA = await makeLandmarker(del, prog); lmB = await makeLandmarker(del, prog); }
@@ -1240,6 +1324,8 @@ $("cmpGo").onclick = async () => {
   cmp.tsA = -1; cmp.tsB = -1; cmp.failsA = 0; cmp.failsB = 0; cmp.fbA = false; cmp.fbB = false;
   cmp.armed = false;
   cmp.t0 = performance.now();
+  cmp.warmUntil = performance.now() + 1000;
+  cmp.shiftSum = 0; cmp.shiftCnt = 0;
   cmp.smoothA = []; cmp.smoothB = [];
   cmp.lastTimeA = -1; cmp.lastTimeB = -1;
   $("csvBtn").disabled = true;
@@ -1352,11 +1438,12 @@ $("cmpPreviewReplay").onclick = () => {
 
 function downloadCSV(){
   const fkeys = FEATURES.filter(featOn).map(f => f.key);
-  const head = ["#","tA","tB", ...fkeys.flatMap(k => [k+"A", k+"B"]), "сходство%"];
+  const head = ["#","tA","tB","сдвиг(мс)","движение", ...fkeys.flatMap(k => [k+"A", k+"B"]), "сходство%"];
   const rows = [head];
   for (let i = 0; i < cmp.samples.length; i++){
     const s = cmp.samples[i];
-    const row = [i+1, s.tA.toFixed(3), s.tB.toFixed(3)];
+    const lag = s.lag != null ? s.lag : (s.tB - s.tA);
+    const row = [i+1, s.tA.toFixed(3), s.tB.toFixed(3), (lag*1000).toFixed(1), s.moved ? "да" : "нет"];
     const sims = [];
     for (const k of fkeys){
       const a = s.a[k], b = s.b[k];
@@ -1369,7 +1456,7 @@ function downloadCSV(){
   }
   const overall = cmp.bigCnt ? (cmp.bigSum/cmp.bigCnt*100).toFixed(1) : "";
   rows.push([]);
-  rows.push(["ИТОГ","","", ...Array(fkeys.length*2).fill(""), overall]);
+  rows.push(["ИТОГ","","","","", ...Array(fkeys.length*2).fill(""), overall]);
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\r\n");
   const blob = new Blob(["\ufeff" + csv], { type:"text/csv;charset=utf-8" });
   const a = document.createElement("a");
