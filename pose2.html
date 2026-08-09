@@ -384,32 +384,53 @@ addEventListener("error", e => say(`Ошибка: ${e.message}`, true));
 addEventListener("unhandledrejection", e => say(`Ошибка: ${e.reason?.message || e.reason}`, true));
 
 let vision = null, PoseLandmarker = null;
+let modelBufCache = null;
 async function ensureBundle(){
   if (PoseLandmarker) return;
   const mod = await import(`${CDN}/vision_bundle.mjs`);
   PoseLandmarker = mod.PoseLandmarker;
   vision = await mod.FilesetResolver.forVisionTasks(`${CDN}/wasm`);
 }
-async function makeLandmarker(delegate){
+async function fetchModelBuffer(local, onProg){
+  if (local){
+    const b = await local.arrayBuffer();
+    if (onProg) onProg(1);
+    return new Uint8Array(b);
+  }
+  if (modelBufCache) return modelBufCache;
+  const res = await fetch(MODEL);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const total = +res.headers.get("content-length") || 0;
+  const reader = res.body.getReader();
+  const chunks = []; let got = 0;
+  for(;;){
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); got += value.length;
+    if (total && onProg) onProg(got / total);
+  }
+  const buf = new Uint8Array(got); let off = 0;
+  for (const c of chunks){ buf.set(c, off); off += c.length; }
+  modelBufCache = buf;
+  if (onProg) onProg(1);
+  return buf;
+}
+async function makeLandmarker(delegate, onProg){
   await ensureBundle();
-  const local = $("mfile").files[0];
-  const base = local ? { modelAssetBuffer: new Uint8Array(await local.arrayBuffer()) }
-                     : { modelAssetPath: MODEL };
-  base.delegate = delegate;
+  const buf = await fetchModelBuffer($("mfile").files[0], onProg);
   return await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: base, runningMode: "VIDEO", numPoses: 1,
+    baseOptions: { modelAssetBuffer: buf, delegate },
+    runningMode: "VIDEO", numPoses: 1,
     minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.5
   });
 }
-async function loadModel(numPoses, delegate){
+async function loadModel(numPoses, delegate, onProg){
   await ensureBundle();
-  const local = $("mfile").files[0];
-  const base = local ? { modelAssetBuffer: new Uint8Array(await local.arrayBuffer()) }
-                     : { modelAssetPath: MODEL };
-  base.delegate = delegate;
+  const buf = await fetchModelBuffer($("mfile").files[0], onProg);
   if (landmarker){ landmarker.close(); landmarker = null; }
   landmarker = await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: base, runningMode: "VIDEO", numPoses,
+    baseOptions: { modelAssetBuffer: buf, delegate },
+    runningMode: "VIDEO", numPoses,
     minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.5
   });
 }
@@ -594,6 +615,7 @@ function loadFile(f){
 }
 
 $("vfile").onchange = e => loadFile(e.target.files[0]);
+$("mfile").onchange = () => { modelBufCache = null; };
 
 v.onloadedmetadata = () => {
   cv.width = v.videoWidth; cv.height = v.videoHeight;
@@ -631,9 +653,10 @@ $("go").onclick = async () => {
 
     const del = $("delegate").value;
     say(`загрузка модели (${del})…`);
-    try { await loadModel(+$("poses").value, del); }
+    const prog = p => say(`загрузка модели (${del})… ${Math.round(p * 100)}%`);
+    try { await loadModel(+$("poses").value, del, prog); }
     catch(err){
-      if (del === "GPU"){ say("GPU не поднялся, пробую CPU…"); await loadModel(+$("poses").value, "CPU"); }
+      if (del === "GPU"){ say("GPU не поднялся, пробую CPU…"); await loadModel(+$("poses").value, "CPU", prog); }
       else throw err;
     }
   } catch(err){
@@ -1201,9 +1224,10 @@ $("cmpGo").onclick = async () => {
     if (!cvA.width || !cvB.width) throw new Error("нет метаданных видео");
     const del = $("delegate").value;
     say2(`загрузка модели (${del})…`);
-    try { lmA = await makeLandmarker(del); lmB = await makeLandmarker(del); }
+    const prog = p => say2(`загрузка модели (${del})… ${Math.round(p * 100)}%`);
+    try { lmA = await makeLandmarker(del, prog); lmB = await makeLandmarker(del, prog); }
     catch(err){
-      if (del === "GPU"){ say2("GPU не поднялся, пробую CPU…"); lmA = await makeLandmarker("CPU"); lmB = await makeLandmarker("CPU"); }
+      if (del === "GPU"){ say2("GPU не поднялся, пробую CPU…"); lmA = await makeLandmarker("CPU", prog); lmB = await makeLandmarker("CPU", prog); }
       else throw err;
     }
   } catch(err){
