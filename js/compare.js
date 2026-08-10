@@ -8,7 +8,7 @@ import { s, cmp } from "./state.js";
 import { featOn, cmpFeatures, covOf, syncGate, refW, currentWin, rangeOf, computeSession, pearson } from "./features.js";
 import { renderScore, renderReps, renderHold, buildCharts, drawCharts, detectExerciseType, resolvePrimary } from "./score.js";
 import { drawSkelC, drawCmpBg } from "./render.js";
-import { dtwAlign, liveDTWMap } from "./dtw.js";
+import { dtwAlign, liveMatch } from "./dtw.js";
 
 const vA = $("vA"), vB = $("vB"), cvA = $("cvA"), cvB = $("cvB");
 const ctxA = cvA.getContext("2d", { alpha:true }), ctxB = cvB.getContext("2d", { alpha:true });
@@ -21,7 +21,7 @@ function cmpSmooth(prev, lm, a, raw){
     const o = prev[j];
     if (vn < VIS_LO) return o;
     if (o.v < VIS_LO) return { x:p.x, y:p.y, z:p.z, v: vn };
-    if (Math.hypot(p.x - o.x, p.y - o.y) > 0.22) return { x:p.x, y:p.y, z:p.z, v: vn };
+    if (Math.hypot(p.x - o.x, p.y - o.y) > 0.15) return { x:p.x, y:p.y, z:p.z, v: vn };
     return { x:a*o.x+(1-a)*p.x, y:a*o.y+(1-a)*p.y, z:a*(o.z??0)+(1-a)*(p.z??0), v:Math.max(o.v, vn) };
   });
 }
@@ -91,7 +91,7 @@ function cmpTick(){
       try {
         const fb = s.lmB.detectForVideo(vB, tsB);
         if (fb?.landmarks?.length){
-          cmp.smoothB = cmpSmooth(cmp.smoothB, fb.landmarks[0], s.camOn ? 0 : smA, s.camOn);
+          cmp.smoothB = cmpSmooth(cmp.smoothB, fb.landmarks[0], s.camOn ? Math.max(0.35, smA) : smA);
           newB = true; cmp.failsB = 0;
         }
       }
@@ -121,24 +121,36 @@ function cmpAddSample(va, vb){
   if (!s.camOn && performance.now() < cmp.warmUntil) return;
   va = va || {}; vb = vb || {};
   const thr = Number($("thr").value);
-  const effThr = s.camOn ? thr + 5 : thr; // камера шумнее файла — небольшой запас допуска
   const tA = vA.currentTime, tB = s.camOn ? performance.now()/1000 : vB.currentTime;
   const win = currentWin();
   const sm = { tA, tB, a:{}, b:{}, s:{}, w:{}, tA_:{}, moved:false, sim:0, wsum:0 };
-  const hB = (cmp.bHist = cmp.bHist || {});
+  // Удержание последнего валидного угла при кратковременной пропаже точки
+  // (микропотери видимости) — дырки в данных не рвут DTW/поиск и не роняют покрытие.
+  const heldB = {};
+  const hB = (cmp.bHist = cmp.bHist || {});   // длинная история B по фичам (okno = win) — для liveMatch
+  const hS = (cmp.bHistS = cmp.bHistS || {}); // короткая история B (~0.5c) — для проверки «застыл/двигается»
   for (const f of FEATURES){
-    const kb = vb[f.key];
+    let kb = vb[f.key];
+    if (kb == null){
+      const lastB = (hB[f.key] || []).slice(-1)[0];
+      if (lastB && tB - lastB[0] <= 0.25) kb = lastB[1];
+    }
+    heldB[f.key] = kb;
     if (kb == null) continue;
     (hB[f.key] = hB[f.key] || []).push([tB, kb]);
     const h = hB[f.key];
-    while (h.length > 1 && h[h.length-1][0] - h[0][0] > 0.5) h.shift();
-    if (h.length > 60) h.shift();
+    while (h.length > 1 && h[h.length-1][0] - h[0][0] > win) h.shift();
+    if (h.length > 120) h.shift();
+    (hS[f.key] = hS[f.key] || []).push([tB, kb]);
+    const hs = hS[f.key];
+    while (hs.length > 1 && hs[hs.length-1][0] - hs[0][0] > 0.5) hs.shift();
+    if (hs.length > 60) hs.shift();
   }
   // статичность B по фичам (за последние ~0.5с)
   const bStuck = {};
   let movedN = 0;
-  for (const k in hB){
-    const h = hB[k];
+  for (const k in hS){
+    const h = hS[k];
     if (h.length < 2) continue;
     if (rangeOf(h) < STATIC_RANGE) bStuck[k] = true;
     else movedN++;
@@ -158,26 +170,29 @@ function cmpAddSample(va, vb){
   for (const f of FEATURES){
     if (!featOn(f)) continue;
     const arr = (cmp.aWin[f.key] = cmp.aWin[f.key] || []);
-    const ka = va[f.key];
+    let ka = va[f.key];
+    if (ka == null){
+      const lastA = arr.slice(-1)[0];
+      if (lastA && tA - lastA[0] <= 0.25) ka = lastA[1];
+    }
     if (ka != null){
       arr.push([tA, ka]);
       while (arr.length > 1 && tA - arr[0][0] > win) arr.shift();
       if (arr.length > 80) arr.shift();
     } else if (arr.length && tA - arr[arr.length-1][0] > 3) arr.length = 0;
-    const kb = vb[f.key];
+    const kb = heldB[f.key];
     let bestSim = null, bestT = null;
     if (kb != null && arr.length){
       if (s.camOn){
-        const dh = (cmp.bHist[f.key] || []).slice(-Math.max(8, Math.round(win * 12)));
-        const dw = liveDTWMap(arr, dh, effThr);
+        // камерный путь: честный softSim по окну A, полоса вокруг прогнозируемого
+        // лага скелета (acq=захват — по всему окну, пока лаг не сошёлся)
+        const dw = liveMatch(arr, kb, tA, cmp.curLagA, cmp.lagAcq, win, thr);
         if (dw){ bestSim = dw.sim; bestT = dw.tAt; }
         else {
-          // DTW «голодает» (окно пусто/мало) — сесть на прогнозируемый лаг скелета и вернуть сходство по нему
-          const taPred = tA - (cmp.curLagA || 0);
+          // полоса пуста (резко выпал из ритма) — резерв: поиск по всему окну
           let m = -Infinity;
           for (const [ta, av] of arr){
-            if (Math.abs(ta - taPred) > 0.5) continue;
-            const s2 = softSim(Math.abs(av - kb), effThr);
+            const s2 = softSim(Math.abs(av - kb), thr);
             if (s2 > m){ m = s2; bestT = ta; }
           }
           if (isFinite(m)) bestSim = m;
@@ -224,7 +239,14 @@ function cmpAddSample(va, vb){
     }
     if (s.camOn && lnA){
       const lagSec = lgA / lnA;
-      cmp.curLagA = (cmp.curLagA || 0) * 0.7 + lagSec * 0.3;
+      // кольцо лагов + усечённое среднее: устойчиво к одиночным «мимо»
+      cmp.lagRing.push(lagSec);
+      if (cmp.lagRing.length > 12) cmp.lagRing.shift();
+      if (cmp.lagRing.length >= 6) cmp.lagAcq = false; // лаги сошлись — уходим в стейди-режим
+      const r = [...cmp.lagRing].sort((x, y) => x - y);
+      const k = Math.max(0, Math.floor(r.length * 0.25));
+      const mid = r.slice(k, r.length - k);
+      cmp.curLagA = mid.reduce((a, x) => a + x, 0) / mid.length;
       sm.lag = lagSec;
     } else {
       sm.lag = tB - tA;
@@ -354,7 +376,10 @@ function cmpUpdateUI(){
   }
   renderScore();
 
-  $("scoreBig").textContent = overall == null ? "—" : overall.toFixed(1) + "%";
+  // лёгкий EMA только на ОТОБРАЖАЕМЫЙ процент — число плавное, расчёт не трогаем
+  if (overall == null) cmp._dispOv = null;
+  else cmp._dispOv = cmp._dispOv == null ? overall : cmp._dispOv * 0.6 + overall * 0.4;
+  $("scoreBig").textContent = overall == null ? "—" : cmp._dispOv.toFixed(1) + "%";
   const dtwTxt = cmp.dtw ? ` · DTW-итог ${cmp.dtw.overall.toFixed(1)}%` : "";
   $("scoreSub").textContent = overall == null
       ? "запустите сравнение"
@@ -725,6 +750,8 @@ async function startCompare(){
   cmp.shiftSum = 0; cmp.shiftCnt = 0;
   cmp.smoothA = []; cmp.smoothB = [];
   cmp.lastTimeA = -1; cmp.lastTimeB = -1;
+  cmp.bHist = {}; cmp.bHistS = {};
+  cmp.curLagA = null; cmp.lagAcq = true; cmp.lagRing = []; cmp._dispOv = null;
   cmp.score = null; cmp.combo = 0; cmp.maxCombo = 0; cmp.tier = null; cmp._uiScored = 0; cmp._sps = null;
   cmp.detB = {}; cmp.repB = []; cmp.repScores = [];
   cmp.primary = null; cmp.exType = null; cmp.dtw = null; cmp.hold = null; cmp.tag = "";
@@ -998,5 +1025,5 @@ export function init(){
   defaultLag();
 
   // Отладочные хуки в window (для тестов/консоли).
-  try { window.__cmp = cmp; window.__camOn = () => s.camOn; window.__liveDTW = liveDTWMap; window.__downloadCSV = downloadCSV; window.__pearson = pearson; window.__syncGate = syncGate; window.__softSim = softSim; } catch(_){}
+  try { window.__cmp = cmp; window.__camOn = () => s.camOn; window.__liveMatch = liveMatch; window.__downloadCSV = downloadCSV; window.__pearson = pearson; window.__syncGate = syncGate; window.__softSim = softSim; } catch(_){}
 }

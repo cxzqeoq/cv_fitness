@@ -43,49 +43,33 @@ export function dtwAlign(a, b, thr){
   return { meanSim, coverage, meanAbs };
 }
 
-// Живое скользящее DTW: последний кадр B кладём на A-траекторию локальным путём.
-// Прощает дрейф темпа («иногда вместе, иногда с опозданием»).
-//   aHist/bHist — [t, val] по возрастанию t, thr — допуск.
-// Возвращает { sim, tAt } (медиана по хвосту пути ~0.3с) или null.
-export function liveDTWMap(aHist, bHist, thr){
-  if (!aHist || !bHist) return null;
-  const n0 = aHist.length, m0 = bHist.length;
-  if (n0 < 3 || m0 < 3) return null;
-  const L = Math.min(n0, m0); // равные длины → путь точно достигает конца при любой полосе K
-  const A = aHist.slice(-L), B = bHist.slice(-L);
-  const n = L, m = L;
-  const K = L; // полная свобода дрейфа внутри окна сравнения (±lagWin) — само окно ограничивает рассинхрон
-  const INF = 1e18;
-  let dp = [], prev = [];
-  for (let i = 0; i < n; i++){ dp.push(new Array(m).fill(INF)); prev.push(new Array(m).fill(-1)); }
-  dp[0][0] = Math.abs(A[0][1] - B[0][1]);
-  for (let j = 1; j <= K && j < m; j++){ dp[0][j] = dp[0][j-1] + Math.abs(A[0][1] - B[j][1]); prev[0][j] = 1; }
-  for (let i = 1; i < n; i++){
-    const j0 = Math.max(0, i - K), j1 = Math.min(m - 1, i + K);
-    for (let j = j0; j <= j1; j++){
-      let best = INF, bp = -1;
-      if (j - 1 >= j0 && dp[i][j-1] < best){ best = dp[i][j-1]; bp = 1; }
-      if (dp[i-1][j] < best){ best = dp[i-1][j]; bp = 0; }
-      if (j - 1 >= 0 && dp[i-1][j-1] < best){ best = dp[i-1][j-1]; bp = 2; }
-      if (bp >= 0){ dp[i][j] = best + Math.abs(A[i][1] - B[j][1]); prev[i][j] = bp; }
+// Живое совпадение с предсказанием лага: лучший softSim по окну эталона.
+// Работает в двух режимах:
+//   acq=true  — захват лага: ищем по всему окну (в начале эталона соседнего
+//               цикла ещё нет, «алиаса» фазы нет) — сходство и tAt честные.
+//   acq=false — стейди-стейт: полоса ±band вокруг предсказанного времени
+//               (tA - curLag), не даёт «перескочить» в соседний цикл на
+//               периодичных движениях и держит % плавным.
+// Возвращает { sim, tAt } или null, если в полосе не нашлось кандидатов
+// (резкий выход из ритма — вызывающий код расширяет поиск на всё окно).
+export function liveMatch(aWin, bVal, tA, curLag, acq, win, thr){
+  if (!aWin || !aWin.length) return null;
+  const band = Math.min(0.6, win / 2);
+  const ref = (curLag == null || acq) ? tA : tA - curLag;
+  const lo = acq ? (tA - win) : ref - band;
+  const hi = acq ? tA : (ref + band);
+  let m = -Infinity, bestT = null, bestD = Infinity;
+  for (const [ta, av] of aWin){
+    if (ta < lo || ta > hi) continue;
+    const d = Math.abs(av - bVal);
+    const s2 = softSim(d, thr);
+    // tie-break на плато softSim (=1): предпочитаем меньшую дельту угла
+    // (точнее фаза), при равной дельте — ближе к центру полосы
+    if (s2 > m ||
+        (s2 === m && bestT != null && (d < bestD || (d === bestD && Math.abs(ta - ref) < Math.abs(bestT - ref))))){
+      m = s2; bestT = ta; bestD = d;
     }
   }
-  if (prev[n-1][m-1] < 0) return null;
-  let i = n - 1, j = m - 1;
-  while (i > 0 && prev[i][j] === 0) i--; // b[последний] накрыл несколько A → берём верхний
-  if (dp[i][j] >= INF) return null;
-  // сходство — медиана по хвосту пути (~0.3с): не точка-в-точку, а окрестность гасит джиттер камеры
-  const tEnd = B[m-1][0];
-  const sims = [];
-  let si = i, sj = j;
-  while (si >= 0 && sj >= 0 && tEnd - B[sj][0] <= 0.3){
-    sims.push(softSim(Math.abs(A[si][1] - B[sj][1]), thr));
-    const p = prev[si][sj];
-    if (p === 1) sj--;
-    else if (p === 0) si--;
-    else { si--; sj--; }
-  }
-  if (!sims.length) return null;
-  sims.sort((x, y) => x - y);
-  return { sim: sims[Math.floor(sims.length/2)], tAt: A[i][0] };
+  if (!isFinite(m)) return null;
+  return { sim: m, tAt: bestT };
 }

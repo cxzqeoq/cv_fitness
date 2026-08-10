@@ -25,7 +25,7 @@ export const cmp = {
   frames:0, t0:0, everyN:0, camTS:0,
   lastTimeA:-1, lastTimeB:-1, smoothA:[], smoothB:[],
   tsA:-1, tsB:-1, failsA:0, failsB:0, fbA:false, fbB:false, aWin:{},
-  warmUntil:0, shiftSum:0, shiftCnt:0, bHist:{},
+  warmUntil:0, shiftSum:0, shiftCnt:0, bHist:{}, bHistS:{}, curLagA:null, lagAcq:true, lagRing:[], _dispOv:null,
   score:null, combo:0, maxCombo:0, tier:null, tierCol:null,
   detB:{}, repB:[], repScores:[], exType:null, primary:null, amp:25,
   hold:null, dtw:null, tag:"",
