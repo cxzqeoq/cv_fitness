@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
+import mimetypes
 import os
 import socket
 import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+# JS грузится как ES-модули — важны корректные MIME-типы.
+# На Windows mimetypes смотрит в реестр и может отдать .js как text/plain.
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -23,8 +29,8 @@ def main():
     ip = lan_ip()
     print()
     print("Скелет поверх видео — локальный сервер")
-    print(f"  ноутбук (камера работает):        http://localhost:{port}/pose2.html")
-    print(f"  телефон по LAN (БЕЗ камеры):      http://{ip}:{port}/pose2.html")
+    print(f"  ноутбук (камера работает):        http://localhost:{port}/")
+    print(f"  телефон по LAN (БЕЗ камеры):      http://{ip}:{port}/")
     print("  телефон с камерой (HTTPS):")
     print(f"     npx localtunnel --port {port}")
     print(f"     cloudflared tunnel --url http://localhost:{port}")

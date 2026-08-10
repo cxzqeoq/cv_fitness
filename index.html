@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Скелет поверх видео · v2</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Скелет поверх видео <small>· v2</small></h1>
+  <div class="sub">Всё считается на этом ноутбуке, в браузере. Видео никуда не отправляется.</div>
+
+  <div class="tabs">
+    <button id="tabSingle" class="act">Один</button>
+    <button id="tabCmp">Сравнение</button>
+  </div>
+
+  <div id="modeSingle">
+
+    <div class="panel" id="dropzone">
+      <div class="row">
+        <label class="f">Видео <input type="file" id="vfile" accept="video/*"></label>
+        <label class="f">Модель .task (офлайн) <input type="file" id="mfile" accept=".task,.tflite"></label>
+        <span id="vinfo" class="mono"></span>
+      </div>
+      <div class="foot" style="margin:6px 0 0">Видео можно просто перетащить в окно или вставить через Ctrl+V.
+      Для live-камеры лучше <b>pose_landmarker_lite.task</b> (быстрее); full/heavy — точнее, но медленнее.</div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <label class="f">Стиль
+          <select id="style">
+            <option value="stick">палочки</option>
+            <option value="full">полный</option>
+            <option value="neon">неон</option>
+            <option value="ghost">прозрачный</option>
+          </select>
+        </label>
+        <label class="f">Фон
+          <select id="bg">
+            <option value="video">видео</option>
+            <option value="dim">приглушённый</option>
+            <option value="black">чёрный</option>
+            <option value="ghost">прозрачный</option>
+          </select>
+        </label>
+        <label class="f">Цвет <input type="color" id="col" value="#c6ff2e"></label>
+        <label class="f">Толщина <input type="range" id="w" min="1" max="3" step="0.1" value="1"></label>
+        <label class="f" title="Сглаживание точек во времени — убирает дрожь">
+          Сглаживание <input type="range" id="sm" min="0" max="90" value="55">
+          <span id="smv" class="mono">0.55</span>
+        </label>
+        <label class="f">Людей
+          <select id="poses"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+        </label>
+        <label class="f">Платформа
+          <select id="delegate"><option value="GPU">GPU</option><option value="CPU">CPU</option></select>
+        </label>
+      </div>
+
+      <div class="crow">
+        <label class="c"><input type="checkbox" id="pHead" checked> голова</label>
+        <label class="c"><input type="checkbox" id="pTorso" checked> корпус</label>
+        <label class="c"><input type="checkbox" id="pArms" checked> руки</label>
+        <label class="c"><input type="checkbox" id="pLegs" checked> ноги</label>
+        <label class="c"><input type="checkbox" id="rec"> записать в файл</label>
+        <span class="recbadge" id="recOn">REC</span>
+        <span style="flex:1"></span>
+        <button id="go" disabled>Запустить</button>
+        <button id="stop" class="ghost" disabled>Стоп</button>
+      </div>
+
+      <div id="prog"><div id="progFill"></div></div>
+      <div class="stat" id="stat"></div>
+      <div id="status">Выберите видеофайл.</div>
+    </div>
+
+    <div id="stage">
+      <div id="hint">здесь появится картинка</div>
+      <canvas id="cv" hidden></canvas>
+    </div>
+
+    <video id="v" playsinline muted preload="auto"></video>
+
+  </div>
+
+  <div id="modeCmp" hidden>
+
+    <div class="panel dz" id="dzA">
+      <div class="row">
+        <label class="f">Видео A · эталон <input type="file" id="cmpAFile" accept="video/*"></label>
+        <span id="infoA" class="mono"></span>
+      </div>
+      <div class="foot" style="margin:6px 0 0">Видео можно перетащить сюда.</div>
+    </div>
+
+    <div class="panel dz" id="dzB">
+      <div class="row">
+        <label class="f">Видео B · повтор <input type="file" id="cmpBFile" accept="video/*"></label>
+        <span id="infoB" class="mono"></span>
+      </div>
+      <div class="crow" style="margin-top:8px">
+        <span class="mono" style="min-width:0">Источник B:</span>
+        <label class="f"><input type="radio" name="srcB" id="srcBFile" checked> файл</label>
+        <label class="f"><input type="radio" name="srcB" id="srcBCam"> камера (телефон)</label>
+        <span style="flex:1"></span>
+        <button id="camBtn" class="ghost" disabled>Включить камеру</button>
+      </div>
+      <div class="foot" style="margin:6px 0 0">Видео можно перетащить сюда. Для камеры нужен HTTPS или localhost
+        (<code>python pose_serve.py</code> + туннель, см. внизу).</div>
+    </div>
+
+    <div class="panel" id="aProfPanel" hidden>
+      <div class="crow" style="margin-bottom:6px">
+        <span class="mono" style="min-width:0">Эталон:</span>
+        <b id="aProfType" class="mono"></b>
+        <span id="aProfAccent" class="mono" style="min-width:0"></span>
+        <span style="flex:1"></span>
+        <button id="aProfBtn" class="ghost">повторить анализ</button>
+      </div>
+      <div id="aProfTip" class="mono" style="min-width:0;margin-bottom:4px"></div>
+      <div id="aProfBars"></div>
+      <div id="aProfNote" class="foot" style="margin:6px 0 0"></div>
+    </div>
+
+    <div class="panel">
+      <div class="crow">
+        <span class="mono" style="min-width:0">Скелет:</span>
+        <label class="f">Стиль
+          <select id="styleC">
+            <option value="stick">палочки</option>
+            <option value="full">полный</option>
+            <option value="neon">неон</option>
+            <option value="ghost">прозрачный</option>
+          </select>
+        </label>
+        <label class="f">Фон
+          <select id="bgC">
+            <option value="video">видео</option>
+            <option value="dim">приглушённый</option>
+            <option value="black">чёрный</option>
+            <option value="ghost">прозрачная</option>
+          </select>
+        </label>
+        <label class="f">Толщина <input type="range" id="wC" min="1" max="3" step="0.1" value="1"></label>
+        <label class="f" title="Сглаживание точек во времени — убирает дрожь">
+          Сглаживание <input type="range" id="smC" min="0" max="90" value="55">
+        </label>
+        <label class="c"><input type="checkbox" id="cHead" checked> голова</label>
+        <label class="c"><input type="checkbox" id="cTorso" checked> корпус</label>
+        <label class="c"><input type="checkbox" id="cArms" checked> руки</label>
+        <label class="c"><input type="checkbox" id="cLegs" checked> ноги</label>
+      </div>
+      <div class="row">
+        <span class="mono" style="min-width:0">Фичи:</span>
+        <label class="chip"><input type="checkbox" id="chk_lElbow" checked> локоть L</label>
+        <label class="chip"><input type="checkbox" id="chk_rElbow" checked> локоть R</label>
+        <label class="chip"><input type="checkbox" id="chk_lKnee" checked> колено L</label>
+        <label class="chip"><input type="checkbox" id="chk_rKnee" checked> колено R</label>
+        <label class="chip"><input type="checkbox" id="chk_lHip" checked> бедро L</label>
+        <label class="chip"><input type="checkbox" id="chk_rHip" checked> бедро R</label>
+        <label class="chip"><input type="checkbox" id="chk_tilt" checked> наклон</label>
+        <label class="chip"><input type="checkbox" id="chk_spread" checked> развод рук</label>
+      </div>
+      <div class="crow">
+        <label class="f" title="Отклонение до этой величины считается идеальным сходством">
+          Допуск <input type="range" id="thr" min="5" max="60" step="1" value="40">
+          <span id="thrv" class="mono">40°</span>
+        </label>
+        <label class="f" title="Прощение задержки повтора: 0 — строго в темп; больше — прощает отставание человека. Итог всегда честный (DTW)">
+          Задержка <input type="range" id="lagWin" min="0" max="2" step="0.5" value="2">
+          <span id="lagWinV" class="mono">2.0 с</span>
+        </label>
+        <label class="c"><input type="checkbox" id="showA" checked> метки углов на скелете</label>
+        <label class="f" id="cntWrap" hidden>Подготовка
+          <select id="cnt">
+            <option value="0">0 с</option>
+            <option value="3">3 с</option>
+            <option value="5" selected>5 с</option>
+            <option value="10">10 с</option>
+          </select>
+        </label>
+        <span style="flex:1"></span>
+        <button id="cmpMark" class="ghost" disabled hidden>Отметить старт A/B</button>
+        <span id="markInfo" class="mono" hidden></span>
+        <span style="flex:1"></span>
+        <button id="cmpPreview" class="ghost" disabled>Просмотр</button>
+        <button id="cmpPreviewReplay" class="ghost" hidden>Повторить заново</button>
+        <button id="cmpGo" disabled>Сравнить</button>
+        <button id="cmpStop" class="ghost" disabled hidden>Стоп</button>
+      </div>
+
+      <div class="crow" style="margin-top:4px">
+        <label class="f">Упражнение
+          <select id="exSel">
+            <option value="auto" selected>— авто —</option>
+            <option value="squat">присед</option>
+            <option value="push">отжимания</option>
+            <option value="lunge">выпады</option>
+            <option value="yogaFlow">йога-поток</option>
+            <option value="yogaHold">йога-поза</option>
+            <option value="plank">планка</option>
+          </select>
+        </label>
+        <label class="f" title="Амплитуда, при которой засчитывается цикл повтора/фазы">
+          Амплитуда <input type="range" id="repAmp" min="5" max="50" step="1" value="25">
+          <span id="repAmpV" class="mono">25°</span>
+        </label>
+        <span class="mono" id="exTip" style="min-width:0"></span>
+      </div>
+
+      <div id="progC"><div id="progFillC"></div></div>
+      <div class="stat" id="statC"></div>
+      <div id="statusC">Загрузите видео в поля A и B.</div>
+    </div>
+
+    <div id="cstageRow">
+      <div class="cstage">
+        <div class="chint">A · эталон</div>
+        <canvas id="cvA" hidden></canvas>
+      </div>
+      <div class="cstage">
+        <div class="chint">B · повтор</div>
+        <canvas id="cvB" hidden></canvas>
+      </div>
+    </div>
+
+    <div id="cvOverlay" hidden>
+      <div id="cvNum"></div>
+      <div id="cvNote"></div>
+    </div>
+
+    <div class="panel">
+      <div id="scorecol">
+        <div class="scblock">
+          <div class="mono" style="margin-bottom:2px">Сходство (accuracy)</div>
+          <div id="scoreBig">—</div>
+        </div>
+        <div class="scblock">
+          <div class="mono" style="margin-bottom:2px">Счёт</div>
+          <div id="scoreLine"><span id="scoreNum">—</span><span id="scoreMaxV" class="sdim">/10 000</span></div>
+          <div id="combo"></div>
+          <div id="tier"></div>
+        </div>
+      </div>
+      <div id="scoreSub"></div>
+      <div id="scoreLegend" class="mono" style="font-size:11px;color:var(--dim);margin-top:4px;opacity:.7">% — сходство позы · очки — накопленная оценка за сессию</div>
+      <div id="repChips" hidden></div>
+      <div id="holdPanel" hidden></div>
+      <div id="ffePer"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--dim)">Кривые углов по времени (A — зелёный, B — оранжевый; заливка — отклонение, красная — больше допуска)</div>
+        <button id="csvBtn" class="ghost" disabled>Скачать CSV</button>
+      </div>
+      <div class="charts" id="charts"></div>
+    </div>
+
+    <video id="vA" playsinline muted preload="auto"></video>
+    <video id="vB" playsinline muted preload="auto"></video>
+
+  </div>
+
+  <div class="foot">
+    <b>Горячие клавиши:</b> <kbd>Пробел</kbd> пуск/стоп &middot; <kbd>Esc</kbd> стоп &middot;
+    <kbd>B</kbd> фон &middot; <kbd>S</kbd> стиль &middot; <kbd>R</kbd> запись &middot; <kbd>P</kbd> число людей &middot;
+    <kbd>H</kbd> голова &middot; <kbd>T</kbd> корпус &middot; <kbd>A</kbd> руки &middot; <kbd>L</kbd> ноги. В режиме «Сравнение»
+    <kbd>Пробел</kbd> запускает/останавливает сопоставление.<br>
+    Модель и WASM тянутся с CDN один раз и кэшируются. Совсем без сети: скачайте
+    <code>pose_landmarker_lite.task</code> и подсуньте его во второе поле первого режима.
+    Точность = среднее по фичам и кадрам от <code>max(0, 1 − |Δ|/допуск)</code>; в режиме камеры
+    сравнение идёт со скользящим окном ±2 с (чтобы компенсировать задержку повторения). Сравнение идёт
+    от отмеченного кадра; у разных по длине видео — до конца более короткого. «Подготовка» даёт обратный
+    отсчёт 3/5/10 с перед стартом, чтобы успеть встать в начальную позу.<br>
+    <b>Камера на телефоне:</b> запустить <code>python pose_serve.py</code> на ноутбуке, затем HTTPS-туннель
+    (<code>npx localtunnel --port 8000</code> или <code>cloudflared tunnel --url http://localhost:8000</code>) и
+    открыть полученную ссылку на телефоне. Картинка с камеры не покидает страницу.
+  </div>
+  <div id="diag"></div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -9,6 +9,7 @@
 
 Требует: pip install segno   (и npx для туннеля).
 """
+import mimetypes
 import os
 import re
 import shutil
@@ -20,6 +21,11 @@ import threading
 import time
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+# JS грузится как ES-модули — важны корректные MIME-типы.
+# На Windows mimetypes смотрит в реестр и может отдать .js как text/plain.
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -130,12 +136,12 @@ def main():
     local_only = "--local" in args
 
     ip = lan_ip()
-    local_url = f"http://{ip}:{port}/pose2.html"
+    local_url = f"http://{ip}:{port}/"
 
     handler = SimpleHTTPRequestHandler
     server = ThreadingHTTPServer(("0.0.0.0", port), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    print(f"Локальный сервер: http://localhost:{port}/pose2.html")
+    print(f"Локальный сервер: http://localhost:{port}/")
 
     proc = None
     if local_only:
