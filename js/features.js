@@ -1,6 +1,6 @@
 // features.js — математика сравнения движений: углы-фичи, видимость,
 // корреляция «формы движения» (форма-гейт), веса по размаху эталона, сессия.
-import { FEATURES, I, SYNC_MIN, STATIC_RANGE, ANGLE_Z_W } from "./config.js";
+import { FEATURES, I, SYNC_MIN, STATIC_RANGE, ANGLE_Z_W, SYNC_STATIC_RNG } from "./config.js";
 import { $, fadeA, mid, pair, ang3w } from "./utils.js";
 import { cmp, s } from "./state.js";
 
@@ -77,7 +77,7 @@ export function syncGate(fkey, winSec){
   if (arrA.length < 16) return 2;
   let mx = -Infinity, mn = Infinity;
   for (const x of arrA){ if (x > mx) mx = x; if (x < mn) mn = x; }
-  if (mx - mn < 8) return 2; // удержание/полу-статичная фича — не по форме судить
+  if (mx - mn < SYNC_STATIC_RNG) return 2; // удержание/полу-статичная фича — не по форме судить
   if (!dts.length) return 2;
   dts.sort((x, y) => x - y);
   const dt = dts[Math.floor(dts.length / 2)];

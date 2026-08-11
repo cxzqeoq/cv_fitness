@@ -284,7 +284,9 @@ function finalDTW(){
     if (a.length < 5 || b.length < 5) continue;
     const res = dtwAlign(a, b, thr);
     if (res){
-      // форма-гейт на итоге: не повторяющий форму человек не должен получить % даже при близких углах
+      // форма-гейт на итоге: не повторяющий форму человек не должен получить % даже при близких углах.
+      // Почти-статические фичи уже обходит syncGate (gate===2), поэтому честное совпадение шума
+      // не зануляется; здесь достаточно безусловного зануления при низкой корреляции формы.
       const g = cmp.gate[f.key];
       if (g !== 2 && g < SYNC_MIN) res.meanSim = 0;
       feat[f.key] = res; any = true;
@@ -300,6 +302,13 @@ function finalDTW(){
 function cmpUpdateUI(){
   const n = cmp.samples.length;
   const last = n ? cmp.samples[n-1] : null;
+  const exEl = $("exTimer");
+  if (exEl){
+    let t = (cmp.running && last) ? last.tA : null;
+    if (t == null && cmp.running && cmp.t0) t = (performance.now() - cmp.t0) / 1000;
+    const mm = Math.floor((t || 0) / 60), ss = Math.round((t || 0) % 60);
+    exEl.textContent = mm + ":" + (ss < 10 ? "0" : "") + ss;
+  }
   const durA = vA.duration || 0;
   const pct = durA ? Math.min(100, (last ? last.tA : 0) / durA * 100).toFixed(0) : 0;
   $("progFillC").style.width = pct + "%";
@@ -754,6 +763,7 @@ async function startCompare(){
   }
 
   cmp.samples = []; cmp.featSum = {}; cmp.featCnt = {}; cmp.featW = {}; cmp.featN = {}; cmp.featHit = {}; cmp.framesTotal = 0; cmp.aWin = {};
+  const exEl0 = $("exTimer"); if (exEl0) exEl0.textContent = "0:00";
   cmp.bigSum = 0; cmp.bigCnt = 0; cmp.frames = 0; cmp.everyN = 0; cmp.camTS = 0;
   cmp.tsA = -1; cmp.tsB = -1; cmp.failsA = 0; cmp.failsB = 0; cmp.fbA = false; cmp.fbB = false;
   cmp.bNew = false; cmp.bNoRVC = !vB.requestVideoFrameCallback || typeof vB.requestVideoFrameCallback !== "function";
@@ -981,6 +991,38 @@ function defaultLag(){
   $("lagWin").value = s.useCamB ? 2 : 0.5;
   $("lagWinV").textContent = Number($("lagWin").value).toFixed(1) + " с";
 }
+
+// ── раскладки окон: меняют только размеры, движок сравнения не трогают ──
+let curLayout = "split";
+let pipState = 0;      // 0 — скрыто, 1 — показано на 5 с, 2 — закреплено
+let pipT = null;
+function pipStage(){ return curLayout === "trainer" ? cvB : cvA; }
+function pipLabel(){ return curLayout === "trainer" ? "меня" : "тренера"; }
+function setPiP(show){
+  pipStage().parentElement.classList.toggle("pip-show", show);
+  $("pipBtn").textContent = pipState === 2 ? "скрыть " + pipLabel() : "показать " + pipLabel();
+}
+export function setLayout(lay){
+  curLayout = lay;
+  const row = $("cstageRow");
+  row.classList.remove("lay-split", "lay-trainer", "lay-self");
+  row.classList.add("lay-" + lay);
+  row.dataset.layout = lay;
+  $("layTrainer").classList.toggle("act", lay === "trainer");
+  $("laySplit").classList.toggle("act", lay === "split");
+  $("laySelf").classList.toggle("act", lay === "self");
+  if (pipT){ clearTimeout(pipT); pipT = null; }
+  pipState = 0;
+  if (lay === "split"){
+    $("pipBtn").hidden = true;
+    if (cvA.parentElement.classList.contains("pip-show")) cvA.parentElement.classList.remove("pip-show");
+    if (cvB.parentElement.classList.contains("pip-show")) cvB.parentElement.classList.remove("pip-show");
+  } else {
+    $("pipBtn").hidden = false;
+    setPiP(false);
+  }
+}
+export function cycleLayout(){ const seq = ["split","trainer","self"]; setLayout(seq[(seq.indexOf(curLayout)+1) % seq.length]); }
 function applyPreset(){
   const sel = $("exSel").value;
   const ex = EXERCISES[sel] || EXERCISES.auto;
@@ -1038,6 +1080,21 @@ export function init(){
   $("repAmpV").textContent = "25°";
   applyPreset();
   defaultLag();
+  $("layTrainer").onclick = () => setLayout("trainer");
+  $("laySplit").onclick = () => setLayout("split");
+  $("laySelf").onclick = () => setLayout("self");
+  $("pipBtn").onclick = () => {
+    if (curLayout === "split") return;
+    clearTimeout(pipT); pipT = null;
+    if (pipState === 0){
+      pipState = 1;
+      setPiP(true);
+      pipT = setTimeout(() => { pipState = 0; setPiP(false); }, 5000);
+      say2("Окно показано на 5 с — нажмите ещё раз, чтобы закрепить.");
+    } else if (pipState === 1){ pipState = 2; setPiP(true); }
+    else { pipState = 0; setPiP(false); }
+  };
+  setLayout("split");
 
   // Отладочные хуки в window (для тестов/консоли).
   try { window.__cmp = cmp; window.__camOn = () => s.camOn; window.__liveMatch = liveMatch; window.__downloadCSV = downloadCSV; window.__pearson = pearson; window.__syncGate = syncGate; window.__softSim = softSim; window.__featOf = (wm, lm) => cmpFeatures(featSource(wm, lm)); } catch(_){}

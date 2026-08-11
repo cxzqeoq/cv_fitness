@@ -127,73 +127,6 @@
 
     <div class="panel">
       <div class="crow">
-        <span class="mono" style="min-width:0">Скелет:</span>
-        <label class="f">Стиль
-          <select id="styleC">
-            <option value="stick">палочки</option>
-            <option value="full">полный</option>
-            <option value="neon">неон</option>
-            <option value="ghost">прозрачный</option>
-          </select>
-        </label>
-        <label class="f">Фон
-          <select id="bgC">
-            <option value="video">видео</option>
-            <option value="dim">приглушённый</option>
-            <option value="black">чёрный</option>
-            <option value="ghost">прозрачная</option>
-          </select>
-        </label>
-        <label class="f">Толщина <input type="range" id="wC" min="1" max="3" step="0.1" value="1"></label>
-        <label class="f" title="Сглаживание точек во времени — убирает дрожь">
-          Сглаживание <input type="range" id="smC" min="0" max="90" value="55">
-        </label>
-        <label class="c"><input type="checkbox" id="cHead" checked> голова</label>
-        <label class="c"><input type="checkbox" id="cTorso" checked> корпус</label>
-        <label class="c"><input type="checkbox" id="cArms" checked> руки</label>
-        <label class="c"><input type="checkbox" id="cLegs" checked> ноги</label>
-      </div>
-      <div class="row">
-        <span class="mono" style="min-width:0">Фичи:</span>
-        <label class="chip"><input type="checkbox" id="chk_lElbow" checked> локоть L</label>
-        <label class="chip"><input type="checkbox" id="chk_rElbow" checked> локоть R</label>
-        <label class="chip"><input type="checkbox" id="chk_lKnee" checked> колено L</label>
-        <label class="chip"><input type="checkbox" id="chk_rKnee" checked> колено R</label>
-        <label class="chip"><input type="checkbox" id="chk_lHip" checked> бедро L</label>
-        <label class="chip"><input type="checkbox" id="chk_rHip" checked> бедро R</label>
-        <label class="chip"><input type="checkbox" id="chk_tilt" checked> наклон</label>
-        <label class="chip"><input type="checkbox" id="chk_spread" checked> развод рук</label>
-        <label class="chip"><input type="checkbox" id="chk_twist" checked> кручение</label>
-      </div>
-      <div class="crow">
-        <label class="f" title="Отклонение до этой величины считается идеальным сходством">
-          Допуск <input type="range" id="thr" min="5" max="60" step="1" value="40">
-          <span id="thrv" class="mono">40°</span>
-        </label>
-        <label class="f" title="Прощение задержки повтора: 0 — строго в темп; больше — прощает отставание человека. Итог всегда честный (DTW)">
-          Задержка <input type="range" id="lagWin" min="0" max="2" step="0.5" value="2">
-          <span id="lagWinV" class="mono">2.0 с</span>
-        </label>
-        <label class="c"><input type="checkbox" id="showA" checked> метки углов на скелете</label>
-        <label class="f" id="cntWrap" hidden>Подготовка
-          <select id="cnt">
-            <option value="0">0 с</option>
-            <option value="3">3 с</option>
-            <option value="5" selected>5 с</option>
-            <option value="10">10 с</option>
-          </select>
-        </label>
-        <span style="flex:1"></span>
-        <button id="cmpMark" class="ghost" disabled hidden>Отметить старт A/B</button>
-        <span id="markInfo" class="mono" hidden></span>
-        <span style="flex:1"></span>
-        <button id="cmpPreview" class="ghost" disabled>Просмотр</button>
-        <button id="cmpPreviewReplay" class="ghost" hidden>Повторить заново</button>
-        <button id="cmpGo" disabled>Сравнить</button>
-        <button id="cmpStop" class="ghost" disabled hidden>Стоп</button>
-      </div>
-
-      <div class="crow" style="margin-top:4px">
         <label class="f">Упражнение
           <select id="exSel">
             <option value="auto" selected>— авто —</option>
@@ -205,19 +138,98 @@
             <option value="plank">планка</option>
           </select>
         </label>
-        <label class="f" title="Амплитуда, при которой засчитывается цикл повтора/фазы">
-          Амплитуда <input type="range" id="repAmp" min="5" max="50" step="1" value="25">
-          <span id="repAmpV" class="mono">25°</span>
-        </label>
         <span class="mono" id="exTip" style="min-width:0"></span>
+        <span style="flex:1"></span>
+        <label class="f" id="cntWrap" hidden>Подготовка
+          <select id="cnt">
+            <option value="0">0 с</option>
+            <option value="3">3 с</option>
+            <option value="5" selected>5 с</option>
+            <option value="10">10 с</option>
+          </select>
+        </label>
+        <button id="cmpGo" disabled>Сравнить</button>
+        <button id="cmpStop" class="ghost" disabled hidden>Стоп</button>
       </div>
+
+      <details class="setbox" id="settingsBox">
+        <summary>Настройки</summary>
+        <div class="crow">
+          <span class="mono" style="min-width:0">Скелет:</span>
+          <label class="f">Стиль
+            <select id="styleC">
+              <option value="stick">палочки</option>
+              <option value="full">полный</option>
+              <option value="neon">неон</option>
+              <option value="ghost">прозрачный</option>
+            </select>
+          </label>
+          <label class="f">Фон
+            <select id="bgC">
+              <option value="video">видео</option>
+              <option value="dim">приглушённый</option>
+              <option value="black">чёрный</option>
+              <option value="ghost">прозрачная</option>
+            </select>
+          </label>
+          <label class="f">Толщина <input type="range" id="wC" min="1" max="3" step="0.1" value="1"></label>
+          <label class="f" title="Сглаживание точек во времени — убирает дрожь">
+            Сглаживание <input type="range" id="smC" min="0" max="90" value="55">
+          </label>
+          <label class="c"><input type="checkbox" id="cHead" checked> голова</label>
+          <label class="c"><input type="checkbox" id="cTorso" checked> корпус</label>
+          <label class="c"><input type="checkbox" id="cArms" checked> руки</label>
+          <label class="c"><input type="checkbox" id="cLegs" checked> ноги</label>
+        </div>
+        <div class="crow">
+          <span class="mono" style="min-width:0">Фичи:</span>
+          <label class="chip"><input type="checkbox" id="chk_lElbow" checked> локоть L</label>
+          <label class="chip"><input type="checkbox" id="chk_rElbow" checked> локоть R</label>
+          <label class="chip"><input type="checkbox" id="chk_lKnee" checked> колено L</label>
+          <label class="chip"><input type="checkbox" id="chk_rKnee" checked> колено R</label>
+          <label class="chip"><input type="checkbox" id="chk_lHip" checked> бедро L</label>
+          <label class="chip"><input type="checkbox" id="chk_rHip" checked> бедро R</label>
+          <label class="chip"><input type="checkbox" id="chk_tilt" checked> наклон</label>
+          <label class="chip"><input type="checkbox" id="chk_spread" checked> развод рук</label>
+          <label class="chip"><input type="checkbox" id="chk_twist" checked> кручение</label>
+        </div>
+        <div class="crow">
+          <label class="f" title="Отклонение до этой величины считается идеальным сходством">
+            Допуск <input type="range" id="thr" min="5" max="60" step="1" value="40">
+            <span id="thrv" class="mono">40°</span>
+          </label>
+          <label class="f" title="Прощение задержки повтора: 0 — строго в темп; больше — прощает отставание человека. Итог всегда честный (DTW)">
+            Задержка <input type="range" id="lagWin" min="0" max="2" step="0.5" value="2">
+            <span id="lagWinV" class="mono">2.0 с</span>
+          </label>
+          <label class="f" title="Амплитуда, при которой засчитывается цикл повтора/фазы">
+            Амплитуда <input type="range" id="repAmp" min="5" max="50" step="1" value="25">
+            <span id="repAmpV" class="mono">25°</span>
+          </label>
+          <label class="c"><input type="checkbox" id="showA" checked> метки углов на скелете</label>
+          <button id="cmpMark" class="ghost" disabled hidden>Отметить старт A/B</button>
+          <span id="markInfo" class="mono" hidden></span>
+          <button id="cmpPreview" class="ghost" disabled>Просмотр</button>
+          <button id="cmpPreviewReplay" class="ghost" hidden>Повторить заново</button>
+          <button id="csvBtn" class="ghost" disabled>Скачать CSV</button>
+        </div>
+      </details>
 
       <div id="progC"><div id="progFillC"></div></div>
       <div class="stat" id="statC"></div>
       <div id="statusC">Загрузите видео в поля A и B.</div>
     </div>
 
-    <div id="cstageRow">
+    <div id="layrow">
+      <span class="mono" style="min-width:0">Раскладка:</span>
+      <button id="layTrainer" class="seg">Тренер</button>
+      <button id="laySplit" class="seg act">50×50</button>
+      <button id="laySelf" class="seg">Я</button>
+      <span style="flex:1"></span>
+      <button id="pipBtn" class="ghost" hidden>показать меня</button>
+    </div>
+
+    <div id="cstageRow" class="lay-split">
       <div class="cstage">
         <div class="chint">A · эталон</div>
         <canvas id="cvA" hidden></canvas>
@@ -245,6 +257,10 @@
           <div id="combo"></div>
           <div id="tier"></div>
         </div>
+        <div class="scblock">
+          <div class="mono" style="margin-bottom:2px">Таймер</div>
+          <div id="exTimer" style="font-size:24px;font-weight:700;color:var(--ink);line-height:1">0:00</div>
+        </div>
       </div>
       <div id="scoreSub"></div>
       <div id="scoreLegend" class="mono" style="font-size:11px;color:var(--dim);margin-top:4px;opacity:.7">% — сходство позы · очки — накопленная оценка за сессию</div>
@@ -254,10 +270,7 @@
     </div>
 
     <div class="panel">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div style="font-size:12px;color:var(--dim)">Кривые углов по времени (A — зелёный, B — оранжевый; заливка — отклонение, красная — больше допуска)</div>
-        <button id="csvBtn" class="ghost" disabled>Скачать CSV</button>
-      </div>
+      <div class="mono" style="font-size:12px;color:var(--dim);margin-bottom:6px">Кривые углов по времени (A — зелёный, B — оранжевый; заливка — отклонение, красная — больше допуска)</div>
       <div class="charts" id="charts"></div>
     </div>
 

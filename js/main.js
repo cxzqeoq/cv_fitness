@@ -4,7 +4,7 @@ import { CYCLES, PART_KEYS } from "./config.js";
 import { $, say, say2, diag } from "./utils.js";
 import { s, cmp } from "./state.js";
 import * as single from "./singles.js";
-import { init as initCompare, cmpStop, loadA, loadB, stopCamera } from "./compare.js";
+import { init as initCompare, cmpStop, loadA, loadB, stopCamera, cycleLayout } from "./compare.js";
 
 let mode = "single";
 
@@ -40,7 +40,10 @@ addEventListener("keydown", e => {
     return;
   }
   if (k === "escape"){ if (mode === "cmp"){ if (cmp.running || cmp.preview) cmpStop(); } else single.stop(); return; }
-  if (mode === "cmp") return;
+  if (mode === "cmp"){
+    if (k === "l"){ cycleLayout(); return; }
+    return;
+  }
   if (k === "p"){ cycle("poses"); return; }
   if (k === "r"){ $("rec").checked = !$("rec").checked; return; }
   if (PART_KEYS[k]){ const el = $(PART_KEYS[k]); el.checked = !el.checked; return; }
