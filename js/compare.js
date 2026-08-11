@@ -1000,7 +1000,7 @@ function pipStage(){ return curLayout === "trainer" ? cvB : cvA; }
 function pipLabel(){ return curLayout === "trainer" ? "меня" : "тренера"; }
 function setPiP(show){
   pipStage().parentElement.classList.toggle("pip-show", show);
-  $("pipBtn").textContent = pipState === 2 ? "скрыть " + pipLabel() : "показать " + pipLabel();
+  $("pipBtn").textContent = show ? "скрыть " + pipLabel() : "показать " + pipLabel();
 }
 export function setLayout(lay){
   curLayout = lay;
