@@ -1,7 +1,7 @@
 // compare.js — режим «Сравнение»: эталон A против повтора B (файл или камера телефона).
 // Сравнение идёт по 8 углам-фичам со скользящим окном (+ DTW), плюс игра-счёт,
 // повторы/удержания, анализ эталона, просмотр и экспорт CSV.
-import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN } from "./config.js";
+import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN, SMOOTH_TELEPORT } from "./config.js";
 import { $, say2, diag, beep, fmtN, softSim, tierFor, mediaErrText, ensureMeta } from "./utils.js";
 import { makeLandmarker, close } from "./model.js";
 import { s, cmp } from "./state.js";
@@ -21,11 +21,23 @@ function cmpSmooth(prev, lm, a, raw){
     const o = prev[j];
     if (vn < VIS_LO) return o;
     if (o.v < VIS_LO) return { x:p.x, y:p.y, z:p.z, v: vn };
-    if (Math.hypot(p.x - o.x, p.y - o.y) > 0.15) return { x:p.x, y:p.y, z:p.z, v: vn };
+    if (Math.hypot(p.x - o.x, p.y - o.y) > SMOOTH_TELEPORT) return { x:p.x, y:p.y, z:p.z, v: vn };
     return { x:a*o.x+(1-a)*p.x, y:a*o.y+(1-a)*p.y, z:a*(o.z??0)+(1-a)*(p.z??0), v:Math.max(o.v, vn) };
   });
 }
 import { VIS_LO } from "./config.js";
+
+// Мировые (метрические) точки фич с видимостью: у worldLandmarks visibility есть,
+// но на всякий случай страхуемся значением из 2D-точки того же индекса.
+function worldOf2(wm, lm){
+  return wm.map((p, j) => ({
+    x:p.x, y:p.y, z:p.z,
+    v: p.visibility ?? (lm && lm[j] && lm[j].visibility) ?? 1
+  }));
+}
+// Источник для расчёта фич: worldLandmarks (метры), если детектор их отдал,
+// иначе 2D-ландмарки (деградация на нестандартном рантайме).
+function featSource(wm, lm){ return (wm && wm.length) ? worldOf2(wm, lm) : lm; }
 
 // Падение детекции канала: по кол-ву подряд — сигнал и переключение на CPU.
 function noteFail(key, er, n){
@@ -58,12 +70,13 @@ function cmpTick(){
       cmp.lastTimeA = vA.currentTime;
       let ts = cmp.tsA < 0 ? Math.round(vA.currentTime * 1000)
                            : Math.max(cmp.tsA + 1, Math.round(vA.currentTime * 1000));
-      if (ts - cmp.tsA > 500 && cmp.tsA >= 0) cmp.smoothA = [];
+      if (ts - cmp.tsA > 500 && cmp.tsA >= 0){ cmp.smoothA = []; cmp.smoothA3D = []; }
       cmp.tsA = ts;
       try {
         const fa = s.lmA.detectForVideo(vA, ts);
         if (fa?.landmarks?.length){
           cmp.smoothA = cmpSmooth(cmp.smoothA, fa.landmarks[0], smA);
+          cmp.smoothA3D = cmpSmooth(cmp.smoothA3D, featSource(fa.worldLandmarks?.[0], fa.landmarks[0]), smA);
           newA = true; cmp.failsA = 0;
         }
       }
@@ -82,7 +95,7 @@ function cmpTick(){
         cmp.lastTimeB = vB.currentTime;
         tsB = cmp.tsB < 0 ? Math.round(vB.currentTime * 1000)
                           : Math.max(cmp.tsB + 1, Math.round(vB.currentTime * 1000));
-        if (tsB - cmp.tsB > 500 && cmp.tsB >= 0) cmp.smoothB = [];
+        if (tsB - cmp.tsB > 500 && cmp.tsB >= 0){ cmp.smoothB = []; cmp.smoothB3D = []; }
         cmp.tsB = tsB;
         doB = true;
       }
@@ -91,7 +104,9 @@ function cmpTick(){
       try {
         const fb = s.lmB.detectForVideo(vB, tsB);
         if (fb?.landmarks?.length){
-          cmp.smoothB = cmpSmooth(cmp.smoothB, fb.landmarks[0], s.camOn ? Math.max(0.35, smA) : smA);
+          const smB = s.camOn ? Math.max(0.35, smA) : smA;
+          cmp.smoothB = cmpSmooth(cmp.smoothB, fb.landmarks[0], smB);
+          cmp.smoothB3D = cmpSmooth(cmp.smoothB3D, featSource(fb.worldLandmarks?.[0], fb.landmarks[0]), smB);
           newB = true; cmp.failsB = 0;
         }
       }
@@ -100,8 +115,8 @@ function cmpTick(){
     if (newA || newB) cmp.frames++;
 
     const colA = "#c6ff2e", colB = "#ff9f1a";
-    const va = cmp.smoothA.length ? cmpFeatures(cmp.smoothA) : null;
-    const vb = cmp.smoothB.length ? cmpFeatures(cmp.smoothB) : null;
+    const va = cmp.smoothA3D.length ? cmpFeatures(cmp.smoothA3D) : null;
+    const vb = cmp.smoothB3D.length ? cmpFeatures(cmp.smoothB3D) : null;
     if (va) drawSkelC(ctxA, cvA.width, cvA.height, colA, cmp.smoothA, $("showA").checked, va);
     if (vb) drawSkelC(ctxB, cvB.width, cvB.height, colB, cmp.smoothB, $("showA").checked, vb);
 
@@ -213,7 +228,7 @@ function cmpAddSample(va, vb){
       // per-feature статика: B застыл (<1.5°), а по A явное движение (>8°) → ошибка (штраф)
       if (bStuck[f.key] && rangeOf(cmp.aWin[f.key]) > 8) bestSim = 0;
       if (gated(f.key)) bestSim = 0;
-      const cv = covOf(cmp.smoothA, f) * covOf(cmp.smoothB, f) || 0;
+      const cv = covOf(cmp.smoothA3D, f) * covOf(cmp.smoothB3D, f) || 0;
       sm.s[f.key] = bestSim;
       sm.w[f.key] = (cv > 0.05 ? 1 : (cv ? cv : 0.05)) * refW(f);
       sm.wsum += sm.w[f.key];
@@ -402,8 +417,8 @@ function cmpUpdateUI(){
   $("ffePer").innerHTML = per;
 
   const blindA = [], blindB = [];
-  const vaNow = cmp.smoothA.length ? cmpFeatures(cmp.smoothA) : null;
-  const vbNow = cmp.smoothB.length ? cmpFeatures(cmp.smoothB) : null;
+  const vaNow = cmp.smoothA3D.length ? cmpFeatures(cmp.smoothA3D) : null;
+  const vbNow = cmp.smoothB3D.length ? cmpFeatures(cmp.smoothB3D) : null;
   if (vaNow) for (const f of FEATURES) if (!featOn(f) || vaNow[f.key] == null) blindA.push(f.name);
   if (vbNow) for (const f of FEATURES) if (!featOn(f) || vbNow[f.key] == null) blindB.push(f.name);
   if (blindA.length) $("infoA").textContent = "⚠ не видно: " + blindA.join(", ");
@@ -496,7 +511,7 @@ async function analyzeA(){
       try { fa = await lm.detectForVideo(vA, ts); } catch(e){ continue; }
       if (!fa?.landmarks?.length) continue;
       det++;
-      const ang = cmpFeatures(fa.landmarks[0]);
+      const ang = cmpFeatures(featSource(fa.worldLandmarks?.[0], fa.landmarks[0]));
       for (const f of FEATURES){
         const v = ang[f.key];
         if (v != null && isFinite(v)) series[f.key].push(v);
@@ -748,7 +763,7 @@ async function startCompare(){
   cmp.t0 = performance.now();
   cmp.warmUntil = performance.now() + 1000;
   cmp.shiftSum = 0; cmp.shiftCnt = 0;
-  cmp.smoothA = []; cmp.smoothB = [];
+  cmp.smoothA = []; cmp.smoothB = []; cmp.smoothA3D = []; cmp.smoothB3D = [];
   cmp.lastTimeA = -1; cmp.lastTimeB = -1;
   cmp.bHist = {}; cmp.bHistS = {};
   cmp.curLagA = null; cmp.lagAcq = true; cmp.lagRing = []; cmp._dispOv = null;
@@ -882,7 +897,7 @@ function downloadCSV(){
     cov[f.key] = p ? +(p.cov || 0).toFixed(2) : null;
   }
   const meta = {
-    ver: "2026-08-10.live-dtw", t: new Date().toISOString(),
+    ver: "2026-08-11.world", t: new Date().toISOString(),
     mode: cmp.modeAtStart || (s.camOn ? "camera" : "file"),
     delegate: cmp.delAtStart || (s.camOn ? "GPU" : $("delegate").value),
     smoothing: $("smC").value, tolerance: thr, lagWin: currentWin(),
@@ -1025,5 +1040,5 @@ export function init(){
   defaultLag();
 
   // Отладочные хуки в window (для тестов/консоли).
-  try { window.__cmp = cmp; window.__camOn = () => s.camOn; window.__liveMatch = liveMatch; window.__downloadCSV = downloadCSV; window.__pearson = pearson; window.__syncGate = syncGate; window.__softSim = softSim; } catch(_){}
+  try { window.__cmp = cmp; window.__camOn = () => s.camOn; window.__liveMatch = liveMatch; window.__downloadCSV = downloadCSV; window.__pearson = pearson; window.__syncGate = syncGate; window.__softSim = softSim; window.__featOf = (wm, lm) => cmpFeatures(featSource(wm, lm)); } catch(_){}
 }

@@ -39,11 +39,16 @@ export const pair = (g, i) => (g[i] || { x:0, y:0, v:0 });
 
 // Угол в трёх точках (градусы). Возвращает null, если позиции вырождены.
 export function ang3(p1, p2, p3){
-  const ux=p1.x-p2.x, uy=p1.y-p2.y, uz=(p1.z??0)-(p2.z??0);
-  const wx=p3.x-p2.x, wy=p3.y-p2.y, wz=(p3.z??0)-(p2.z??0);
-  const mu=Math.hypot(ux,uy,uz), mw=Math.hypot(wx,wy,wz);
+  return ang3w(p1, p2, p3, 1);
+}
+// То же, но с весом оси z (глубины): zW=1 — полное 3D, меньше — приглушить z.
+export function ang3w(p1, p2, p3, zW){
+  const uz=(p1.z??0)-(p2.z??0), wz=(p3.z??0)-(p2.z??0);
+  const ux=p1.x-p2.x, uy=p1.y-p2.y;
+  const wx=p3.x-p2.x, wy=p3.y-p2.y;
+  const mu=Math.hypot(ux,uy,uz*zW), mw=Math.hypot(wx,wy,wz*zW);
   if (!mu || !mw) return null;
-  const cos=(ux*wx+uy*wy+uz*wz)/(mu*mw);
+  const cos=(ux*wx+uy*wy+(uz*zW)*(wz*zW))/(mu*mw);
   return Math.acos(Math.max(-1, Math.min(1, cos))) * 180/Math.PI;
 }
 

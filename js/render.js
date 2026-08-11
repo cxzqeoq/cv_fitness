@@ -89,7 +89,7 @@ export function drawSkelC(cr, cw, ch, col, g, showDeg, vals){
     cr.font = `bold ${Math.max(10, base*1.4)}px ${font}`;
     for (const f of FEATURES){
       const val = vals[f.key]; if (val == null) continue;
-      const p = (f.spread || f.tilt) ? mid(pair(g,I.LSH), pair(g,I.RSH)) : pair(g, f.b);
+      const p = (f.spread || f.tilt || f.twist) ? mid(pair(g,I.LSH), pair(g,I.RSH)) : pair(g, f.b);
       if (!p || fadeA(p.v ?? 1) <= 0) continue;
       const x = p.x*cw, y = p.y*ch, t = val.toFixed(0)+"°";
       cr.strokeStyle = "#000"; cr.lineWidth = 3; cr.strokeText(t, x+6, y+6);

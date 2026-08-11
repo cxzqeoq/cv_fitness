@@ -24,6 +24,14 @@ export const GROUPS = {
 // Пороги видимости: меньше VIS_LO — точка «невидима», дальше к 1 — прозрачность растёт.
 export const VIS_LO = 0.15, VIS_SPAN = 0.6;
 
+// Сглаживание: порог «телепорта» — скачок больше этой величины (в координатах
+// массива: доли кадра для 2D, метры для worldLandmarks) берётся сырым, без смешивания.
+export const SMOOTH_TELEPORT = 0.15;
+
+// Вес оси z (глубины) в расчёте углов: 1 — полное 3D, меньше — приглушить шумную
+// глубину на камере (0.7 если в лайве z гуляет слишком сильно).
+export const ANGLE_Z_W = 1.0;
+
 // Минимальная рассинхронизированная корреляция «формы движения» (форма-гейт).
 export const SYNC_MIN = 0.78;
 
@@ -39,7 +47,8 @@ export const TIERS = [
   { min:0.00, name:"МИМО",     col:"#ff7a45" }
 ];
 
-// Фичи сравнения: углы {a,b,c} через ang3(), tilt — наклон корпуса, spread — развод рук.
+// Фичи сравнения: углы {a,b,c} через ang3()/ang3w() (метры, world-фрейм),
+// tilt — наклон корпуса, spread — развод рук, twist — кручение (только world).
 export const FEATURES = [
   { key:"lElbow", name:"локоть L", a:I.LSH,  b:I.LEL, c:I.LWR },
   { key:"rElbow", name:"локоть R", a:I.RSH,  b:I.REL, c:I.RWR },
@@ -48,7 +57,8 @@ export const FEATURES = [
   { key:"lHip",   name:"бедро L",  a:I.LSH,  b:I.LHIP, c:I.LKN },
   { key:"rHip",   name:"бедро R",  a:I.RSH,  b:I.RHIP, c:I.RKN },
   { key:"tilt",   name:"наклон",   tilt:true },
-  { key:"spread", name:"развод рук", spread:true }
+  { key:"spread", name:"развод рук", spread:true },
+  { key:"twist",  name:"кручение", twist:true }
 ];
 
 // Пресеты упражнений: первичная фича, амплитуда цикла, окно, допуск и подсказка.

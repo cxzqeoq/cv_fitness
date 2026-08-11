@@ -23,7 +23,7 @@ export const cmp = {
   running:false, preview:false, markA:0, markB:0,
   samples:[], featSum:{}, featCnt:{}, bigSum:0, bigCnt:0,
   frames:0, t0:0, everyN:0, camTS:0,
-  lastTimeA:-1, lastTimeB:-1, smoothA:[], smoothB:[],
+  lastTimeA:-1, lastTimeB:-1, smoothA:[], smoothB:[], smoothA3D:[], smoothB3D:[],
   tsA:-1, tsB:-1, failsA:0, failsB:0, fbA:false, fbB:false, aWin:{},
   warmUntil:0, shiftSum:0, shiftCnt:0, bHist:{}, bHistS:{}, curLagA:null, lagAcq:true, lagRing:[], _dispOv:null,
   score:null, combo:0, maxCombo:0, tier:null, tierCol:null,

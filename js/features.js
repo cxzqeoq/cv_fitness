@@ -1,7 +1,7 @@
 // features.js — математика сравнения движений: углы-фичи, видимость,
 // корреляция «формы движения» (форма-гейт), веса по размаху эталона, сессия.
-import { FEATURES, I, SYNC_MIN, STATIC_RANGE } from "./config.js";
-import { $, fadeA, mid, pair, ang3 } from "./utils.js";
+import { FEATURES, I, SYNC_MIN, STATIC_RANGE, ANGLE_Z_W } from "./config.js";
+import { $, fadeA, mid, pair, ang3w } from "./utils.js";
 import { cmp, s } from "./state.js";
 
 // Включена ли фича на форме (чекбокс chk_<key>).
@@ -11,6 +11,7 @@ export function featOn(f){ return $("chk_" + f.key).checked; }
 export function featCoords(f){
   if (f.tilt)  return [I.LSH, I.RSH, I.LHIP, I.RHIP];
   if (f.spread) return [I.LSH, I.RSH, I.LWR, I.RWR];
+  if (f.twist) return [I.LSH, I.RSH, I.LHIP, I.RHIP];
   return [f.a, f.b, f.c];
 }
 
@@ -113,11 +114,23 @@ export function featAngle(g, f){
   }
   if (f.spread){
     const sh = mid(pair(g,I.LSH), pair(g,I.RSH));
-    return ang3(pair(g,I.LWR), sh, pair(g,I.RWR));
+    return ang3w(pair(g,I.LWR), sh, pair(g,I.RWR), ANGLE_Z_W);
+  }
+  if (f.twist){
+    // Кручение корпуса: угол между плечевой и тазовой линиями в горизонтальной
+    // плоскости (world XZ). Работает только в метровом world-фрейме: в проекции
+    // камеры эта же величина зависела бы от ракурса.
+    const ls=pair(g,I.LSH), rs=pair(g,I.RSH), lh=pair(g,I.LHIP), rh=pair(g,I.RHIP);
+    const sx=rs.x-ls.x, sz=(rs.z??0)-(ls.z??0);
+    const hx=rh.x-lh.x, hz=(rh.z??0)-(lh.z??0);
+    const ms=Math.hypot(sx,sz), mh=Math.hypot(hx,hz);
+    if (!ms || !mh) return null;
+    const cos=(sx*hx+sz*hz)/(ms*mh);
+    return Math.acos(Math.max(-1, Math.min(1, cos))) * 180/Math.PI;
   }
   const ok = [f.a,f.b,f.c].every(i => fadeA(pair(g,i).v ?? 1) > 0);
   if (!ok) return null;
-  return ang3(pair(g,f.a), pair(g,f.b), pair(g,f.c));
+  return ang3w(pair(g,f.a), pair(g,f.b), pair(g,f.c), ANGLE_Z_W);
 }
 
 // Все активные фичи позы.
