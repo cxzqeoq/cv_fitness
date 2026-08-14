@@ -79,6 +79,23 @@ addEventListener("paste", e => {
 // Допуск (градусы) — подпись у ползунка.
 $("thr").oninput = e => $("thrv").textContent = e.target.value + "°";
 
+// ── звук видео: громкость + mute, применяются на лету (A — эталон, v — «Один») ──
+function applyAudio(){
+  for (const id of ["vA", "v"]){
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.volume = s.sound.vol;
+    el.muted = s.sound.muted;
+  }
+}
+$("vol").oninput = e => {
+  s.sound.vol = +e.target.value / 100;
+  $("volV").textContent = e.target.value + "%";
+  applyAudio();
+};
+$("sndOn").onchange = e => { s.sound.muted = !e.target.checked; applyAudio(); };
+applyAudio();
+
 // ── запуск ──
 single.init();
 initCompare();

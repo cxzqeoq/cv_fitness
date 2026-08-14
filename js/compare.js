@@ -2,7 +2,7 @@
 // Сравнение идёт по 8 углам-фичам со скользящим окном (+ DTW), плюс игра-счёт,
 // повторы/удержания, анализ эталона, просмотр и экспорт CSV.
 import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN, SMOOTH_TELEPORT } from "./config.js";
-import { $, say2, diag, beep, fmtN, softSim, tierFor, mediaErrText, ensureMeta } from "./utils.js";
+import { $, say2, diag, beep, fmtN, softSim, tierFor, mediaErrText, ensureMeta, playVideo } from "./utils.js";
 import { makeLandmarker, close } from "./model.js";
 import { s, cmp } from "./state.js";
 import { featOn, cmpFeatures, covOf, syncGate, refW, currentWin, rangeOf, computeSession, pearson } from "./features.js";
@@ -72,12 +72,14 @@ function cmpTick(){
                            : Math.max(cmp.tsA + 1, Math.round(vA.currentTime * 1000));
       if (ts - cmp.tsA > 500 && cmp.tsA >= 0){ cmp.smoothA = []; cmp.smoothA3D = []; }
       cmp.tsA = ts;
+      if (s.lmA) s.lmA._lastTs = ts;
       try {
         const fa = s.lmA.detectForVideo(vA, ts);
         if (fa?.landmarks?.length){
           cmp.smoothA = cmpSmooth(cmp.smoothA, fa.landmarks[0], smA);
           cmp.smoothA3D = cmpSmooth(cmp.smoothA3D, featSource(fa.worldLandmarks?.[0], fa.landmarks[0]), smA);
           newA = true; cmp.failsA = 0;
+          if (cmp.audioPending){ cmp.audioPending = false; vA.muted = s.sound.muted; }
         }
       }
       catch(er){ cmp.failsA++; noteFail("A", er, cmp.failsA); }
@@ -89,6 +91,7 @@ function cmpTick(){
         if (cmp.bNew || cmp.bNoRVC){ // детект строго на новый кадр камеры (rVFC) — без лишнего инференса на каждый rAF
           cmp.bNew = false;
           tsB = ++cmp.camTS;
+          if (s.lmB) s.lmB._lastTs = tsB;
           doB = true;
         }
       } else if (vB.currentTime !== cmp.lastTimeB){
@@ -97,6 +100,7 @@ function cmpTick(){
                           : Math.max(cmp.tsB + 1, Math.round(vB.currentTime * 1000));
         if (tsB - cmp.tsB > 500 && cmp.tsB >= 0){ cmp.smoothB = []; cmp.smoothB3D = []; }
         cmp.tsB = tsB;
+        if (s.lmB) s.lmB._lastTs = tsB;
         doB = true;
       }
     }
@@ -287,8 +291,10 @@ function finalDTW(){
       // форма-гейт на итоге: не повторяющий форму человек не должен получить % даже при близких углах.
       // Почти-статические фичи уже обходит syncGate (gate===2), поэтому честное совпадение шума
       // не зануляется; здесь достаточно безусловного зануления при низкой корреляции формы.
+      // meanAbs <= thr*0.5: сам DTW доказал, что форма повторяется (одинаковые видео),
+      // — полу-статичные фичи с шумовой корреляцией гейта не зануляем (иначе % гуляет 64↔100).
       const g = cmp.gate[f.key];
-      if (g !== 2 && g < SYNC_MIN) res.meanSim = 0;
+      if (g !== 2 && g < SYNC_MIN && res.meanAbs > thr * 0.5) res.meanSim = 0;
       feat[f.key] = res; any = true;
     }
   }
@@ -764,8 +770,12 @@ async function startCompare(){
 
   cmp.samples = []; cmp.featSum = {}; cmp.featCnt = {}; cmp.featW = {}; cmp.featN = {}; cmp.featHit = {}; cmp.framesTotal = 0; cmp.aWin = {};
   const exEl0 = $("exTimer"); if (exEl0) exEl0.textContent = "0:00";
-  cmp.bigSum = 0; cmp.bigCnt = 0; cmp.frames = 0; cmp.everyN = 0; cmp.camTS = 0;
-  cmp.tsA = -1; cmp.tsB = -1; cmp.failsA = 0; cmp.failsB = 0; cmp.fbA = false; cmp.fbB = false;
+  cmp.bigSum = 0; cmp.bigCnt = 0; cmp.frames = 0; cmp.everyN = 0;
+  cmp.camTS = s.lmB?._lastTs ?? 0;      // таймстампы растут и между запусками: graph не
+  cmp.tsA = s.lmA?._lastTs ?? -1;       // пересоздаётся, а MediaPipe требует строго
+  cmp.tsB = s.lmB?._lastTs ?? -1;       // возрастающие ts (иначе "norm_rect timestamp mismatch")
+  cmp.audioPending = !s.sound.muted;    // звук включаем с первого обработанного кадра
+  cmp.failsA = 0; cmp.failsB = 0; cmp.fbA = false; cmp.fbB = false;
   cmp.bNew = false; cmp.bNoRVC = !vB.requestVideoFrameCallback || typeof vB.requestVideoFrameCallback !== "function";
   cmp.armed = false;
   cmp.modeAtStart = s.camOn ? "camera" : "file";
@@ -798,12 +808,16 @@ async function startCompare(){
     const ok = await runCountdown(prepSec);
     if (!ok){ say2("Подготовка отменена."); return; }
     cmp.armed = true;
-    try { await vA.play(); await vB.play(); }
-    catch(err){ say2(`Не запустилось: ${err.message}`, true); }
+    vA.volume = s.sound.vol;                       // звук — только у эталона A
+    const pA = playVideo(vA, false);   // звук — с первого обработанного кадра (audioPending)
+    try { await vB.play(); } catch(err){ say2(`Не запустилось: ${err.message}`, true); }
+    try { await pA; } catch(err){ say2(`Не запустилось: ${err.message}`, true); }
   } else {
     cmp.armed = true;
-    try { await vA.play(); await vB.play(); }
-    catch(err){ say2(`Не запустилось: ${err.message}`, true); }
+    vA.volume = s.sound.vol;
+    const pA = playVideo(vA, false);   // звук — с первого обработанного кадра (audioPending)
+    try { await vB.play(); } catch(err){ say2(`Не запустилось: ${err.message}`, true); }
+    try { await pA; } catch(err){ say2(`Не запустилось: ${err.message}`, true); }
     cmpTick();
   }
   say2(`сравнение… старт A ${cmp.markA.toFixed(2)}с${s.camOn ? " · камера live" : ", B " + cmp.markB.toFixed(2) + "с"}`);
@@ -813,6 +827,7 @@ export function cmpStop(){
   if (cmp.preview){ stopPreview(); return; }
   const wasRun = cmp.running;
   cmp.running = false;
+  cmp.audioPending = false;
   cmp._noAnalyze = false;
   const ov = $("cvOverlay");
   if (ov) ov.hidden = true;
@@ -890,8 +905,10 @@ function startPreview(){
   if (vA.currentTime <= 0 || vA.currentTime >= (vA.duration || Infinity) - 0.05){
     vA.currentTime = cmp.markA;
   }
-  vA.play().then(() => say2("Просмотр эталона — только видео. Остановить можно кнопкой «Стоп»."))
-            .catch(err => say2(`Просмотр не запустился: ${err.message}`, true));
+  vA.volume = s.sound.vol;
+  playVideo(vA, !s.sound.muted)
+    .then(() => say2("Просмотр эталона — только видео. Остановить можно кнопкой «Стоп»."))
+    .catch(err => say2(`Просмотр не запустился: ${err.message}`, true));
   previewTick();
 }
 
@@ -1066,7 +1083,8 @@ export function init(){
     $("cmpGo").disabled = true; $("cmpMark").disabled = true; $("cmpStop").disabled = false;
     $("cmpStop").hidden = false;
     vA.currentTime = cmp.markA;
-    vA.play().catch(err => say2(`Не запустилось: ${err.message}`, true));
+    vA.volume = s.sound.vol;
+    playVideo(vA, !s.sound.muted).catch(err => say2(`Не запустилось: ${err.message}`, true));
     previewTick();
   };
   $("aProfBtn").onclick = () => analyzeA();

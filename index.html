@@ -206,6 +206,11 @@
             Амплитуда <input type="range" id="repAmp" min="5" max="50" step="1" value="25">
             <span id="repAmpV" class="mono">25°</span>
           </label>
+          <label class="f" title="Громкость звука видео (эталон A, просмотр, режим «Один»)">
+            Звук <input type="range" id="vol" min="0" max="100" step="1" value="50">
+            <span id="volV" class="mono">50%</span>
+          </label>
+          <label class="c"><input type="checkbox" id="sndOn" checked> звук видео</label>
           <label class="c"><input type="checkbox" id="showA" checked> метки углов на скелете</label>
           <button id="cmpMark" class="ghost" disabled hidden>Отметить старт A/B</button>
           <span id="markInfo" class="mono" hidden></span>

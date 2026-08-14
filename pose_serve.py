@@ -10,6 +10,15 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("text/javascript", ".mjs")
 
+
+# Запрет кэширования: иначе браузер кэширует ES-модули по отдельности и после
+# правок может держать старый utils.js при новых импортёрах (ошибка «doesn't
+# provide an export named …»). Каждый запрос должен всегда брать свежий файл.
+class NoCacheHandler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        super().end_headers()
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -36,7 +45,7 @@ def main():
     print(f"     cloudflared tunnel --url http://localhost:{port}")
     print("  Ctrl+C — остановить.")
     print()
-    server = ThreadingHTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", port), NoCacheHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -16,7 +16,8 @@ export const s = {
   aAnalyzeT: null,       // таймер отложенного анализа
   chartCV: {},           // канвасы графиков по фичам
   lagTouched: false,     // пользователь вручную двигал «задержку»
-  actx: null             // AudioContext (лениво создаётся в beep)
+  actx: null,            // AudioContext (лениво создаётся в beep)
+  sound: { vol: 0.5, muted: false }  // настройки звука видео: громкость 0..1, mute=false — звук есть
 };
 
 export const cmp = {

@@ -2,7 +2,8 @@
 // стили, фон, сглаживание, запись результата в файл.
 // Состояние — внутри модуля; наружу отдаём start/stop/loadFile через init().
 import { I, GROUPS } from "./config.js";
-import { $, say, setStat, fadeA, mid, pair, ensureMeta, mediaErrText } from "./utils.js";
+import { $, say, setStat, fadeA, mid, pair, ensureMeta, mediaErrText, playVideo } from "./utils.js";
+import { s } from "./state.js";
 import { makeLandmarker, close, clearModelCache } from "./model.js";
 
 const v = $("v"), cv = $("cv"), ctx = cv.getContext("2d", { alpha:true });
@@ -255,7 +256,8 @@ async function run(){
   if (v.currentTime <= 0 || v.currentTime >= (v.duration || Infinity) - 0.05){
     v.currentTime = 0;
   }
-  try { await v.play(); } catch(err){ say(`Видео не запустилось: ${err.message}`, true); }
+  v.volume = s.sound.vol;
+  try { await playVideo(v, !s.sound.muted); } catch(err){ say(`Видео не запустилось: ${err.message}`, true); }
   loop();
 }
 

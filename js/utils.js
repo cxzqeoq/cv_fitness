@@ -97,3 +97,18 @@ export function beep(freq, dur){
     o.start(); o.stop(s.actx.currentTime + (dur || 0.16));
   } catch(_){}
 }
+
+// ── запуск видео со звуком (обход автоплей-политики) ──
+// Реальный звук включается в контексте жеста пользователя; если async-старт со
+// звуком запрещён (iOS Safari, старт после await), начинаем как muted и включаем
+// звук после успешного старта. Резолвится, как только видео пошло (тихо или со
+// звуком); отклоняется только если и прямой, и фолбэк-старт не удались.
+export function playVideo(v, sound){
+  v.muted = !sound;
+  const p = v.play();
+  if (!sound || !p) return p || Promise.resolve();
+  return p.catch(() => {
+    v.muted = true;
+    return v.play().then(() => { v.muted = false; }).then(() => true, () => false);
+  });
+}
