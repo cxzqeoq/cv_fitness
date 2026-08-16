@@ -3,7 +3,8 @@
 // Сверяем 2-row banded DP с эталонной полной матрицей (старый код) и проверяем
 // полосу-кап, покрытие и отсутствие OOM на больших входах.
 import assert from "node:assert/strict";
-import { dtwAlign } from "../../js/dtw.js";
+import { dtwAlign, bestInWindow } from "../../js/dtw.js";
+import { softSim } from "../../js/utils.js";
 
 // Эталонная реализация (копия старого кода: полная матрица + бэктрекинг).
 function refAlign(a, b, band){
@@ -133,6 +134,56 @@ check("large input with band cap is fast", () => {
   const ms = Date.now() - t0;
   assert.ok(r, "null");
   assert.ok(ms < 5000, `слишком долго: ${ms}ms`);
+});
+
+// 8. bestInWindow — единый tie-break на плато softSim (Фаза 3.1):
+//    при равном sim побеждает меньшая дельта угла (точнее фаза), иначе ближе к ref.
+check("bestInWindow plateau: min delta wins", () => {
+  const w = [[1, 100], [2, 105], [3, 110]];
+  const r = bestInWindow(w, 104, 40, 3);
+  assert.ok(r, "null");
+  assert.equal(r.bestT, 2);      // |105-104|=1 — ближайший по углу, не первый в окне
+  assert.equal(r.bestD, 1);
+  assert.equal(r.m, 1);          // все кандидаты на плато (=1)
+});
+check("bestInWindow plateau: oldest-in-window no longer wins", () => {
+  // регрессия исходного бага: первый (самый старый) кандидат на плато тоже sim=1,
+  // но рядом лежит совпадение с ошибкой 1° — должен победить он
+  const w = [[1, 140], [2, 106]];
+  const r = bestInWindow(w, 105, 40, 2);
+  assert.ok(r);
+  assert.equal(r.bestT, 2);
+  assert.equal(r.bestD, 1);      // не 35 (|140-105|), как было без tie-break
+});
+check("bestInWindow tie on delta: closer to ref", () => {
+  const w = [[1, 104], [3, 104]];
+  const r = bestInWindow(w, 104, 40, 2.5);
+  assert.ok(r);
+  assert.equal(r.bestT, 3);      // |3-2.5| < |1-2.5|
+  assert.equal(r.bestD, 0);
+});
+check("bestInWindow sim is primary key", () => {
+  // все вне допуска: побеждает max softSim (=min delta, монотонность)
+  const w = [[1, 140], [2, 130]];
+  const r = bestInWindow(w, 105, 20, 1);
+  assert.ok(r);
+  assert.equal(r.bestD, 25);                          // |130-105|
+  assert.equal(r.m, softSim(25, 20));                 // (44-25)/24
+  // внутри допуска кандидат бьёт более дальний вне допуска
+  const w2 = [[1, 145], [2, 113]];
+  const r2 = bestInWindow(w2, 105, 20, 1);
+  assert.ok(r2);
+  assert.equal(r2.bestT, 2);
+  assert.equal(r2.bestD, 8);
+  assert.equal(r2.m, 1);
+});
+check("bestInWindow empty window => null; beyond cap => worst match", () => {
+  assert.equal(bestInWindow([], 104, 40, 3), null);
+  // кандидат за пределом капа — валидное (худшее) совпадение с sim=0, не null
+  const r = bestInWindow([[1, 200]], 105, 20, 1);
+  assert.ok(r);
+  assert.equal(r.m, 0);
+  assert.equal(r.bestD, 95);
 });
 
 if (failed){ console.log(`\n${failed} тестов FAILED`); process.exit(1); }

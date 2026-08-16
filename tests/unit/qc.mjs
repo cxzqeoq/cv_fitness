@@ -1,7 +1,7 @@
-// Юнит-тесты qc.js: med, medianTail, sigmaRobust (Node ESM).
+// Юнит-тесты qc.js: med, medianTail, sigmaRobust, gaussSim (Node ESM).
 // Запуск: node tests/unit/qc.mjs
 import assert from "node:assert/strict";
-import { med, medianTail, sigmaRobust } from "../../js/qc.js";
+import { med, medianTail, sigmaRobust, gaussSim } from "../../js/qc.js";
 
 // ── med ──
 assert.equal(med([]), 0);
@@ -44,5 +44,13 @@ assert.ok(Math.abs(sigmaRobust(gWithOut) - 5) < 1.5, `σ с выбросами �
 
 // Малый объём данных (как на старте сессии) — не падает.
 assert.equal(sigmaRobust([1, 2]), 0);
+
+// ── gaussSim: exp(−err²/2σ²) ──
+assert.ok(Math.abs(gaussSim(0, 5) - 1) < 1e-12, "0° → 1");
+assert.ok(Math.abs(gaussSim(5, 5) - Math.exp(-0.5)) < 1e-12, "err==σ → 0.607");
+assert.ok(Math.abs(gaussSim(10, 5) - Math.exp(-2)) < 1e-12, "err==2σ → 0.135");
+assert.equal(gaussSim(null, 5), 0);
+assert.equal(gaussSim(3, 0), 0);
+assert.equal(gaussSim(3, -1), 0);
 
 console.log("все тесты прошли");

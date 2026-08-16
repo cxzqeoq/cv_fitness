@@ -65,6 +65,14 @@ export const SIGMA_SPIKE = 25;
 // EMA: вес нового σ (0.1 — очень медленно дрейфует до заморозки).
 export const SIGMA_EMA = 0.1;
 
+// ── Фаза 3: честная шкала ──
+// Строгий гауссиан: σ = tol / SIGMA_TOL_FACTOR (ошибка == tol даёт ~32%).
+export const SIGMA_TOL_FACTOR = 1.5;
+// Ошибка «идеального повтора» ≈ √2·σn (разность двух независимых измерений).
+export const CEIL_ERR_K = Math.SQRT2;
+// Нижний кламп потолка — нормировка не взрывается при экстремальном шуме.
+export const CEIL_FLOOR = 0.15;
+
 // Тиры: как интерпретировать сходство кадра.
 export const TIERS = [
   { min:0.85, name:"ОТЛИЧНО", col:"#c6ff2e" },

@@ -1,15 +1,15 @@
 // compare.js — режим «Сравнение»: эталон A против повтора B (файл или камера телефона).
 // Сравнение идёт по 8 углам-фичам со скользящим окном (+ DTW), плюс игра-счёт,
 // повторы/удержания, анализ эталона, просмотр и экспорт CSV.
-import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN, SYNC_HARD, SYNC_REL_MIN_SPS, SMOOTH_TELEPORT, DEFAULT_SIGMA, SIGMA_WIN_S, SIGMA_MIN_RESID, SIGMA_FREEZE_S, SIGMA_SPIKE, SIGMA_EMA } from "./config.js";
+import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN, SYNC_HARD, SYNC_REL_MIN_SPS, SMOOTH_TELEPORT, DEFAULT_SIGMA, SIGMA_WIN_S, SIGMA_MIN_RESID, SIGMA_FREEZE_S, SIGMA_SPIKE, SIGMA_EMA, SIGMA_TOL_FACTOR, CEIL_ERR_K, CEIL_FLOOR } from "./config.js";
 import { $, say2, diag, beep, fmtN, softSim, tierFor, mediaErrText, ensureMeta, playVideo } from "./utils.js";
 import { makeLandmarker } from "./model.js";
 import { s, cmp } from "./state.js";
 import { featOn, cmpFeatures, covOf, syncGate, refW, currentWin, rangeOf, computeSession, pearson, featWeights } from "./features.js";
 import { renderScore, renderReps, renderHold, buildCharts, drawCharts, detectExerciseType, resolvePrimary } from "./score.js";
 import { drawSkelC, drawCmpBg } from "./render.js";
-import { dtwAlign, liveMatch } from "./dtw.js";
-import { med, medianTail, sigmaRobust } from "./qc.js";
+import { dtwAlign, liveMatch, bestInWindow } from "./dtw.js";
+import { med, medianTail, sigmaRobust, simReported } from "./qc.js";
 
 const vA = $("vA"), vB = $("vB"), cvA = $("cvA"), cvB = $("cvB");
 const ctxA = cvA.getContext("2d", { alpha:true }), ctxB = cvB.getContext("2d", { alpha:true });
@@ -234,28 +234,21 @@ function cmpAddSample(va, vb){
     let bestSim = null, bestT = null, bestD = null;
     if (kb != null && arr.length){
       if (s.camOn){
-        // камерный путь: честный softSim по окну A, полоса вокруг прогнозируемого
-        // лага скелета (acq=захват — по всему окну, пока лаг не сошёлся)
+        // камерный путь: выбор выравнивания — softSim по окну A, полоса вокруг
+        // прогнозируемого лага (acq=захват — по всему окну, пока лаг не сошёлся)
         const dw = liveMatch(arr, kb, tA, cmp.curLagA, cmp.lagAcq, win, thr);
-        if (dw){ bestSim = dw.sim; bestT = dw.tAt; bestD = dw.err; }
+        if (dw){ bestT = dw.tAt; bestD = dw.err; }
         else {
           // полоса пуста (резко выпал из ритма) — резерв: поиск по всему окну
-          let m = -Infinity;
-          for (const [ta, av] of arr){
-            const s2 = softSim(Math.abs(av - kb), thr);
-            if (s2 > m){ m = s2; bestT = ta; bestD = Math.abs(av - kb); }
-          }
-          if (isFinite(m)) bestSim = m;
+          const best = bestInWindow(arr, kb, thr, tA - (cmp.curLagA ?? 0));
+          if (best){ bestT = best.bestT; bestD = best.bestD; }
         }
       } else {
-        let m = -Infinity;
-        for (const [ta, av] of arr){
-          const s2 = softSim(Math.abs(av - kb), thr);
-          if (s2 > m){ m = s2; bestT = ta; bestD = Math.abs(av - kb); }
-        }
-        if (isFinite(m)) bestSim = m;
-        else bestT = null;
+        const best = bestInWindow(arr, kb, thr, tA);
+        if (best){ bestT = best.bestT; bestD = best.bestD; }
       }
+      // честная шкала (Фаза 3): ошибка в ° → гауссиан с потолком от σ_noise
+      if (bestD != null) bestSim = simReported(bestD, thr, cmp.sigmaNoise[f.key] ?? DEFAULT_SIGMA, SIGMA_TOL_FACTOR, CEIL_ERR_K, CEIL_FLOOR);
     }
     sm.a[f.key] = ka ?? null; sm.b[f.key] = kb ?? null;
     sm.tA_[f.key] = bestT;
@@ -336,6 +329,8 @@ function finalDTW(){
     if (a.length < 5 || b.length < 5) continue;
     const res = dtwAlign(a, b, thr, band);
     if (res){
+      // честная шкала (Фаза 3): DTW-ошибка в ° → гауссиан с потолком от σ_noise
+      res.meanSim = simReported(res.meanAbs, thr, cmp.sigmaNoise[f.key] ?? DEFAULT_SIGMA, SIGMA_TOL_FACTOR, CEIL_ERR_K, CEIL_FLOOR);
       // форма-гейт на итоге: не повторяющий форму человек не должен получить % даже при близких углах.
       // Почти-статические фичи уже обходит syncGate (gate===2), поэтому честное совпадение шума
       // не зануляется; здесь достаточно безусловного зануления при низкой корреляции формы.
@@ -1055,7 +1050,10 @@ function downloadCSV(){
       row.push(b != null ? b.toFixed(2) : "");
       row.push(taA != null ? taA.toFixed(2) : "");
       row.push(s2.e[k] != null ? s2.e[k].toFixed(2) : "");
-      const sim = (a != null && b != null) ? softSim(Math.abs(a - b), thr) : null;
+      // sim — готовое scored-значение (уже с tie-break на лучшем совпадении и
+      // гейтами, как в живом счёте/сессии): консистентно со скобкой и тирами.
+      // err (s2.e[k]) рядом — сырая «погрешность в °» на лучшем совпадении.
+      const sim = s2.s[k] != null ? s2.s[k] : null;
       row.push(sim != null ? sim.toFixed(3) : "");
       row.push((s2.w[k] || 0).toFixed(3));
       row.push((a != null && b != null) ? 1 : 0);

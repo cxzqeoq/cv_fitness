@@ -51,6 +51,27 @@ export function dtwAlign(a, b, thr, band){
   return { meanSim, coverage, meanAbs };
 }
 
+// Лучшее совпадение в окне эталона: поиск по всем [t, val] с единым tie-break.
+// Приоритет: выше softSim → меньше дельта угла (точнее фаза) → ближе к ref по времени.
+// tie-break на плато softSim (=1) важен: без него первый в окне (самый старый)
+// кандидат побеждал бы только за счёт порядка, и при быстрых движениях на
+// независимых декодах «лучшая» ошибка раздувалась до 25-39°, хотя рядом лежало
+// совпадение с ошибкой в 1-5°.
+// Возвращает { m, bestT, bestD } (bestD — |Δ| в ° на лучшем совпадении) или null.
+export function bestInWindow(aWin, bVal, thr, ref){
+  let m = -Infinity, bestT = null, bestD = Infinity;
+  for (const [ta, av] of aWin){
+    const d = Math.abs(av - bVal);
+    const s2 = softSim(d, thr);
+    if (s2 > m ||
+        (s2 === m && bestT != null && (d < bestD || (d === bestD && Math.abs(ta - ref) < Math.abs(bestT - ref))))){
+      m = s2; bestT = ta; bestD = d;
+    }
+  }
+  if (!isFinite(m)) return null;
+  return { m, bestT, bestD };
+}
+
 // Живое совпадение с предсказанием лага: лучший softSim по окну эталона.
 // Работает в двух режимах:
 //   acq=true  — захват лага: ищем по всему окну (в начале эталона соседнего
@@ -67,18 +88,9 @@ export function liveMatch(aWin, bVal, tA, curLag, acq, win, thr){
   const ref = (curLag == null || acq) ? tA : tA - curLag;
   const lo = acq ? (tA - win) : ref - band;
   const hi = acq ? tA : (ref + band);
-  let m = -Infinity, bestT = null, bestD = Infinity;
-  for (const [ta, av] of aWin){
-    if (ta < lo || ta > hi) continue;
-    const d = Math.abs(av - bVal);
-    const s2 = softSim(d, thr);
-    // tie-break на плато softSim (=1): предпочитаем меньшую дельту угла
-    // (точнее фаза), при равной дельте — ближе к центру полосы
-    if (s2 > m ||
-        (s2 === m && bestT != null && (d < bestD || (d === bestD && Math.abs(ta - ref) < Math.abs(bestT - ref))))){
-      m = s2; bestT = ta; bestD = d;
-    }
-  }
-  if (!isFinite(m)) return null;
-  return { sim: m, tAt: bestT, err: bestD };
+  const inBand = [];
+  for (const [ta, av] of aWin) if (ta >= lo && ta <= hi) inBand.push([ta, av]);
+  const best = bestInWindow(inBand, bVal, thr, ref);
+  if (!best) return null;
+  return { sim: best.m, tAt: best.bestT, err: best.bestD };
 }
