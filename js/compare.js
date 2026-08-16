@@ -3,9 +3,9 @@
 // повторы/удержания, анализ эталона, просмотр и экспорт CSV.
 import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN, SMOOTH_TELEPORT } from "./config.js";
 import { $, say2, diag, beep, fmtN, softSim, tierFor, mediaErrText, ensureMeta, playVideo } from "./utils.js";
-import { makeLandmarker, close } from "./model.js";
+import { makeLandmarker } from "./model.js";
 import { s, cmp } from "./state.js";
-import { featOn, cmpFeatures, covOf, syncGate, refW, currentWin, rangeOf, computeSession, pearson } from "./features.js";
+import { featOn, cmpFeatures, covOf, syncGate, refW, currentWin, rangeOf, computeSession, pearson, featWeights } from "./features.js";
 import { renderScore, renderReps, renderHold, buildCharts, drawCharts, detectExerciseType, resolvePrimary } from "./score.js";
 import { drawSkelC, drawCmpBg } from "./render.js";
 import { dtwAlign, liveMatch } from "./dtw.js";
@@ -152,14 +152,14 @@ function cmpAddSample(va, vb){
     let kb = vb[f.key];
     if (kb == null){
       const lastB = (hB[f.key] || []).slice(-1)[0];
-      if (lastB && tB - lastB[0] <= 0.25) kb = lastB[1];
+      if (lastB && tB - lastB[0] <= 0.25) kb = lastB[1]; // 0.25с — не дольше, иначе «заморозка» искажает живой счёт
     }
     heldB[f.key] = kb;
     if (kb == null) continue;
     (hB[f.key] = hB[f.key] || []).push([tB, kb]);
     const h = hB[f.key];
     while (h.length > 1 && h[h.length-1][0] - h[0][0] > win) h.shift();
-    if (h.length > 120) h.shift();
+    if (h.length > 120) h.shift(); // верхний кап: очень длинные окна/редкие фичи не должны копить память
     (hS[f.key] = hS[f.key] || []).push([tB, kb]);
     const hs = hS[f.key];
     while (hs.length > 1 && hs[hs.length-1][0] - hs[0][0] > 0.5) hs.shift();
@@ -192,7 +192,7 @@ function cmpAddSample(va, vb){
     let ka = va[f.key];
     if (ka == null){
       const lastA = arr.slice(-1)[0];
-      if (lastA && tA - lastA[0] <= 0.25) ka = lastA[1];
+      if (lastA && tA - lastA[0] <= 0.25) ka = lastA[1]; // то же удержание, что у B — окно 0.25с
     }
     if (ka != null){
       arr.push([tA, ka]);
@@ -241,8 +241,6 @@ function cmpAddSample(va, vb){
       cmp.featW[f.key] = (cmp.featW[f.key] || 0) + sm.w[f.key];
       cmp.featN[f.key] = (cmp.featN[f.key] || 0) + 1;
       cmp.featSum[f.key] = (cmp.featSum[f.key] || 0) + bestSim * sm.w[f.key];
-      const hit = cv > 0 && bestSim >= 0.55;
-      cmp.featHit[f.key] = (cmp.featHit[f.key] || 0) + (hit ? 1 : 0);
     }
   }
   if (sm.wsum) sm.sim /= sm.wsum;
@@ -263,7 +261,7 @@ function cmpAddSample(va, vb){
       if (cmp.lagRing.length > 12) cmp.lagRing.shift();
       if (cmp.lagRing.length >= 6) cmp.lagAcq = false; // лаги сошлись — уходим в стейди-режим
       const r = [...cmp.lagRing].sort((x, y) => x - y);
-      const k = Math.max(0, Math.floor(r.length * 0.25));
+      const k = Math.max(0, Math.floor(r.length * 0.25)); // отсекаем по четверти с каждого края (устойчиво к «мимо»)
       const mid = r.slice(k, r.length - k);
       cmp.curLagA = mid.reduce((a, x) => a + x, 0) / mid.length;
       sm.lag = lagSec;
@@ -347,7 +345,7 @@ function cmpUpdateUI(){
   ];
   $("statC").innerHTML = statParts.filter(Boolean).map(h => `<span>${h}</span>`).join("");
 
-  const LIVE = 120;
+  const LIVE = 120; // живое окно: ~2с при 60 к/с — «скользящая» оценка счётчика
   const winS = cmp.samples.slice(-LIVE);
   if (cmp.exType == null) detectExerciseType();
   if (cmp.exType !== "hold" && cmp.primary == null) cmp.primary = resolvePrimary();
@@ -768,9 +766,9 @@ async function startCompare(){
     $("cmpGo").disabled = false; return;
   }
 
-  cmp.samples = []; cmp.featSum = {}; cmp.featCnt = {}; cmp.featW = {}; cmp.featN = {}; cmp.featHit = {}; cmp.framesTotal = 0; cmp.aWin = {};
+  cmp.samples = []; cmp.featSum = {}; cmp.featW = {}; cmp.featN = {}; cmp.framesTotal = 0; cmp.aWin = {};
   const exEl0 = $("exTimer"); if (exEl0) exEl0.textContent = "0:00";
-  cmp.bigSum = 0; cmp.bigCnt = 0; cmp.frames = 0; cmp.everyN = 0;
+  cmp.frames = 0; cmp.everyN = 0;
   cmp.camTS = s.lmB?._lastTs ?? 0;      // таймстампы растут и между запусками: graph не
   cmp.tsA = s.lmA?._lastTs ?? -1;       // пересоздаётся, а MediaPipe требует строго
   cmp.tsB = s.lmB?._lastTs ?? -1;       // возрастающие ts (иначе "norm_rect timestamp mismatch")
@@ -781,15 +779,15 @@ async function startCompare(){
   cmp.modeAtStart = s.camOn ? "camera" : "file";
   cmp.delAtStart = s.camOn ? "GPU" : $("delegate").value;
   cmp.t0 = performance.now();
-  cmp.warmUntil = performance.now() + 1000;
+  cmp.warmUntil = performance.now() + 1000; // 1с прогрева: не считаем, пока детекторы не прогрелись
   cmp.shiftSum = 0; cmp.shiftCnt = 0;
   cmp.smoothA = []; cmp.smoothB = []; cmp.smoothA3D = []; cmp.smoothB3D = [];
   cmp.lastTimeA = -1; cmp.lastTimeB = -1;
   cmp.bHist = {}; cmp.bHistS = {};
   cmp.curLagA = null; cmp.lagAcq = true; cmp.lagRing = []; cmp._dispOv = null;
   cmp.score = null; cmp.combo = 0; cmp.maxCombo = 0; cmp.tier = null; cmp._uiScored = 0; cmp._sps = null;
-  cmp.detB = {}; cmp.repB = []; cmp.repScores = [];
-  cmp.primary = null; cmp.exType = null; cmp.dtw = null; cmp.hold = null; cmp.tag = "";
+  cmp.detB = {}; cmp.repScores = [];
+  cmp.primary = null; cmp.exType = null; cmp.dtw = null; cmp.tag = "";
   $("scoreNum").textContent = "—";
   $("combo").textContent = "";
   $("tier").textContent = "";
@@ -1055,7 +1053,7 @@ function applyPreset(){
   else cmp.exType = null;
   cmp.primary = resolvePrimary();
   cmp.tag = "";
-  cmp.detB = {}; cmp.repB = []; cmp.repScores = [];
+  cmp.detB = {}; cmp.repScores = [];
 }
 
 // Привязка событий режима (вызывается из main.js после готовности DOM).

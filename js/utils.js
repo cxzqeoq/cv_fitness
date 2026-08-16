@@ -20,8 +20,10 @@ export function diag(msg, isErr){
 }
 
 // Глобальные перехватчики ошибок — чтобы падения были видны на странице.
-window.addEventListener("error", e => { try { diag("ошибка: " + (e.message || (e.error && e.error.message) || e.type), true); } catch(_){} });
-window.addEventListener("unhandledrejection", e => { try { diag("rejection: " + ((e.reason && e.reason.message) || e.reason), true); } catch(_){} });
+if (typeof window !== "undefined"){
+  window.addEventListener("error", e => { try { diag("ошибка: " + (e.message || (e.error && e.error.message) || e.type), true); } catch(_){} });
+  window.addEventListener("unhandledrejection", e => { try { diag("rejection: " + ((e.reason && e.reason.message) || e.reason), true); } catch(_){} });
+}
 
 export function fmtN(n){ return n == null ? "—" : Math.round(n).toLocaleString("ru-RU"); }
 

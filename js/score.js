@@ -1,6 +1,6 @@
 // score.js — очки, тиры, комбо, повторы/фазы/удержания и графики углов.
 import { TIERS, TIER_MAX, EXERCISES, FEATURES, STATIC_RANGE } from "./config.js";
-import { $, fmtN, tierFor, say2 } from "./utils.js";
+import { $, fmtN, say2 } from "./utils.js";
 import { cmp, s } from "./state.js";
 import { featOn, rangeOf } from "./features.js";
 
@@ -50,6 +50,7 @@ export function detectExerciseType(){
   const key = cmp.primary || resolvePrimary();
   if (!key) return;
   const arr = aAngleSeries(key);
+  // STATIC_RANGE=1.5° порог «застывшей» фичи; ×4 — минимум амплитуды, чтобы считаться циклом
   if (rangeOf(arr) < STATIC_RANGE * 4){ cmp.exType = "hold"; return; }
   let ext = 0, dir = 0, prev = null;
   for (const [t, v] of arr){

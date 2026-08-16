@@ -1,6 +1,6 @@
 // features.js — математика сравнения движений: углы-фичи, видимость,
 // корреляция «формы движения» (форма-гейт), веса по размаху эталона, сессия.
-import { FEATURES, I, SYNC_MIN, STATIC_RANGE, ANGLE_Z_W, SYNC_STATIC_RNG } from "./config.js";
+import { FEATURES, I, SYNC_MIN, ANGLE_Z_W, SYNC_STATIC_RNG } from "./config.js";
 import { $, fadeA, mid, pair, ang3w } from "./utils.js";
 import { cmp, s } from "./state.js";
 
@@ -33,12 +33,6 @@ export function rangeOf(arr){
   let mn = 1e9, mx = -1e9;
   for (const [, v] of arr){ if (v < mn) mn = v; if (v > mx) mx = v; }
   return mx - mn;
-}
-export function meanOf(arr){
-  if (!arr || !arr.length) return null;
-  let s = 0;
-  for (const [, v] of arr) s += v;
-  return s / arr.length;
 }
 
 // Пирсон между двумя рядами; 0-дисперсия → 1 (сигнала нет — не «шумная» фича).
