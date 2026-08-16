@@ -1,7 +1,7 @@
 // compare.js — режим «Сравнение»: эталон A против повтора B (файл или камера телефона).
 // Сравнение идёт по 8 углам-фичам со скользящим окном (+ DTW), плюс игра-счёт,
 // повторы/удержания, анализ эталона, просмотр и экспорт CSV.
-import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN, SMOOTH_TELEPORT } from "./config.js";
+import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN, SYNC_HARD, SYNC_REL_MIN_SPS, SMOOTH_TELEPORT } from "./config.js";
 import { $, say2, diag, beep, fmtN, softSim, tierFor, mediaErrText, ensureMeta, playVideo } from "./utils.js";
 import { makeLandmarker } from "./model.js";
 import { s, cmp } from "./state.js";
@@ -296,6 +296,10 @@ function finalDTW(){
     sps = 1 / dts[Math.floor(dts.length / 2)];
   }
   const band = Math.max(4, Math.round(2 * sps));
+  // Гейт формы надёжен только при плотном сэмплинге: на разрежённой камере (~1 сэмпл/с)
+  // быстрые фичи алиасятся и корреляция идентичного контента тоже низкая (диагноз Шага 0),
+  // поэтому в редких сессиях по гейту не нулим — только по большой ошибке DTW.
+  const gateReliable = sps >= SYNC_REL_MIN_SPS;
   const feat = {}; let any = false;
   for (const f of FEATURES){
     if (!featOn(f)) continue;
@@ -313,7 +317,14 @@ function finalDTW(){
       // — полу-статичные фичи с шумовой корреляцией гейта не зануляем (иначе % гуляет 64↔100).
       // gate берём как среднее по сессии (не последний сэмпл — иначе скачок в конце решает всё).
       const g = cmp.gateN[f.key] ? cmp.gateSum[f.key] / cmp.gateN[f.key] : cmp.gate[f.key];
-      if (g !== 2 && g < SYNC_MIN && res.meanAbs > thr * 0.5) res.meanSim = 0;
+      if (g !== 2 && g < SYNC_MIN){
+        if (res.meanAbs > thr * 0.5) res.meanSim = 0;
+        // «совсем не то» при малых углах: случайно близкие углы чужого движения
+        // не должны спасаться исключением abs<=thr*0.5 (foreign файл был 44% из-за
+        // локтей/развода/twist с gate 0.2–0.5 и abs 1–19°). Но только при плотном
+        // сэмплинге, где корреляция формы достоверна.
+        else if (gateReliable && g < SYNC_HARD) res.meanSim = 0;
+      }
       feat[f.key] = res; any = true;
     }
   }
