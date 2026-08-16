@@ -58,8 +58,9 @@ export function dtwAlign(a, b, thr, band){
 //   acq=false — стейди-стейт: полоса ±band вокруг предсказанного времени
 //               (tA - curLag), не даёт «перескочить» в соседний цикл на
 //               периодичных движениях и держит % плавным.
-// Возвращает { sim, tAt } или null, если в полосе не нашлось кандидатов
-// (резкий выход из ритма — вызывающий код расширяет поиск на всё окно).
+// Возвращает { sim, tAt, err } (err — |Δ| в ° на лучшем совпадении) или null,
+// если в полосе не нашлось кандидатов (резкий выход из ритма — вызывающий код
+// расширяет поиск на всё окно).
 export function liveMatch(aWin, bVal, tA, curLag, acq, win, thr){
   if (!aWin || !aWin.length) return null;
   const band = Math.min(0.6, win / 2);
@@ -79,5 +80,5 @@ export function liveMatch(aWin, bVal, tA, curLag, acq, win, thr){
     }
   }
   if (!isFinite(m)) return null;
-  return { sim: m, tAt: bestT };
+  return { sim: m, tAt: bestT, err: bestD };
 }

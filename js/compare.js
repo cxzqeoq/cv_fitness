@@ -1,7 +1,7 @@
 // compare.js — режим «Сравнение»: эталон A против повтора B (файл или камера телефона).
 // Сравнение идёт по 8 углам-фичам со скользящим окном (+ DTW), плюс игра-счёт,
 // повторы/удержания, анализ эталона, просмотр и экспорт CSV.
-import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN, SYNC_HARD, SYNC_REL_MIN_SPS, SMOOTH_TELEPORT } from "./config.js";
+import { TIER_MAX, FEATURES, EXERCISES, STATIC_RANGE, SYNC_MIN, SYNC_HARD, SYNC_REL_MIN_SPS, SMOOTH_TELEPORT, DEFAULT_SIGMA, SIGMA_WIN_S, SIGMA_MIN_RESID, SIGMA_FREEZE_S, SIGMA_SPIKE, SIGMA_EMA } from "./config.js";
 import { $, say2, diag, beep, fmtN, softSim, tierFor, mediaErrText, ensureMeta, playVideo } from "./utils.js";
 import { makeLandmarker } from "./model.js";
 import { s, cmp } from "./state.js";
@@ -9,6 +9,7 @@ import { featOn, cmpFeatures, covOf, syncGate, refW, currentWin, rangeOf, comput
 import { renderScore, renderReps, renderHold, buildCharts, drawCharts, detectExerciseType, resolvePrimary } from "./score.js";
 import { drawSkelC, drawCmpBg } from "./render.js";
 import { dtwAlign, liveMatch } from "./dtw.js";
+import { med, medianTail, sigmaRobust } from "./qc.js";
 
 const vA = $("vA"), vB = $("vB"), cvA = $("cvA"), cvB = $("cvB");
 const ctxA = cvA.getContext("2d", { alpha:true }), ctxB = cvB.getContext("2d", { alpha:true });
@@ -142,7 +143,7 @@ function cmpAddSample(va, vb){
   const thr = Number($("thr").value);
   const tA = vA.currentTime, tB = s.camOn ? performance.now()/1000 : vB.currentTime;
   const win = currentWin();
-  const sm = { tA, tB, a:{}, b:{}, s:{}, w:{}, tA_:{}, moved:false, sim:0, wsum:0 };
+  const sm = { tA, tB, a:{}, b:{}, s:{}, w:{}, e:{}, tA_:{}, moved:false, sim:0, wsum:0 };
   // Удержание последнего валидного угла при кратковременной пропаже точки
   // (микропотери видимости) — дырки в данных не рвут DTW/поиск и не роняют покрытие.
   const heldB = {};
@@ -164,6 +165,30 @@ function cmpAddSample(va, vb){
     const hs = hS[f.key];
     while (hs.length > 1 && hs[hs.length-1][0] - hs[0][0] > 0.5) hs.shift();
     if (hs.length > 60) hs.shift();
+    // σ_noise (Фаза 1): остаток val − median3 по короткому окну B. Окно ≤ SIGMA_WIN_S —
+    // кривизна движения мизерна, остаток шум-доминирован → MAD/0.6745 даёт робастный
+    // разброс оценки угла на этом устройстве. Спайки/телепорты не копим.
+    if (!cmp.sigmaFrozen[f.key] && hs.length >= 4 && tB - hs[hs.length-3][0] <= SIGMA_WIN_S){
+      const prevVal = hs[hs.length-2][1];
+      if (Math.abs(kb - prevVal) <= SIGMA_SPIKE){
+        const m3 = medianTail(hs, 3);
+        if (m3 != null){
+          const ring = (cmp.resid[f.key] = cmp.resid[f.key] || []);
+          ring.push(kb - m3);
+          if (ring.length > 400) ring.shift();
+          if (ring.length >= SIGMA_MIN_RESID){
+            const sig = sigmaRobust(ring);
+            cmp.sigmaNoise[f.key] = cmp.sigmaNoise[f.key] == null
+                ? sig
+                : cmp.sigmaNoise[f.key] * (1 - SIGMA_EMA) + sig * SIGMA_EMA;
+          }
+        }
+      }
+    }
+    if (tA >= SIGMA_FREEZE_S && !cmp.sigmaFrozen[f.key]){
+      cmp.sigmaFrozen[f.key] = true;
+      if (cmp.sigmaNoise[f.key] == null) cmp.sigmaNoise[f.key] = DEFAULT_SIGMA;
+    }
   }
   // статичность B по фичам (за последние ~0.5с)
   const bStuck = {};
@@ -206,19 +231,19 @@ function cmpAddSample(va, vb){
       if (arr.length > 80) arr.shift();
     } else if (arr.length && tA - arr[arr.length-1][0] > 3) arr.length = 0;
     const kb = heldB[f.key];
-    let bestSim = null, bestT = null;
+    let bestSim = null, bestT = null, bestD = null;
     if (kb != null && arr.length){
       if (s.camOn){
         // камерный путь: честный softSim по окну A, полоса вокруг прогнозируемого
         // лага скелета (acq=захват — по всему окну, пока лаг не сошёлся)
         const dw = liveMatch(arr, kb, tA, cmp.curLagA, cmp.lagAcq, win, thr);
-        if (dw){ bestSim = dw.sim; bestT = dw.tAt; }
+        if (dw){ bestSim = dw.sim; bestT = dw.tAt; bestD = dw.err; }
         else {
           // полоса пуста (резко выпал из ритма) — резерв: поиск по всему окну
           let m = -Infinity;
           for (const [ta, av] of arr){
             const s2 = softSim(Math.abs(av - kb), thr);
-            if (s2 > m){ m = s2; bestT = ta; }
+            if (s2 > m){ m = s2; bestT = ta; bestD = Math.abs(av - kb); }
           }
           if (isFinite(m)) bestSim = m;
         }
@@ -226,7 +251,7 @@ function cmpAddSample(va, vb){
         let m = -Infinity;
         for (const [ta, av] of arr){
           const s2 = softSim(Math.abs(av - kb), thr);
-          if (s2 > m){ m = s2; bestT = ta; }
+          if (s2 > m){ m = s2; bestT = ta; bestD = Math.abs(av - kb); }
         }
         if (isFinite(m)) bestSim = m;
         else bestT = null;
@@ -240,6 +265,7 @@ function cmpAddSample(va, vb){
       if (gated(f.key)) bestSim = 0;
       const cv = covOf(cmp.smoothA3D, f) * covOf(cmp.smoothB3D, f) || 0;
       sm.s[f.key] = bestSim;
+      sm.e[f.key] = bestD; // ошибка в ° на лучшем совпадении (до гейта) — честная «погрешность позы»
       sm.w[f.key] = (cv > 0.05 ? 1 : (cv ? cv : 0.05)) * refW(f);
       sm.wsum += sm.w[f.key];
       sm.sim += bestSim * sm.w[f.key];
@@ -440,10 +466,24 @@ function cmpUpdateUI(){
   if (overall == null) cmp._dispOv = null;
   else cmp._dispOv = cmp._dispOv == null ? overall : cmp._dispOv * 0.6 + overall * 0.4;
   $("scoreBig").textContent = overall == null ? "—" : cmp._dispOv.toFixed(1) + "%";
-  const dtwTxt = cmp.dtw ? ` · DTW-итог ${cmp.dtw.overall.toFixed(1)}%` : "";
+  // «средняя ошибка в °»: среднее |Δ| по живым сэмплам (есть у выровненных фич);
+  // финальный итог — по DTW (meanAbs, coverage-взвешенно).
+  let eSum = 0, eN = 0;
+  for (const sm of winS) for (const k in sm.e){ eSum += sm.e[k]; eN++; }
+  const avgErr = eN ? eSum / eN : null;
+  let dtwErr = null;
+  if (cmp.dtw){
+    let es = 0, ew = 0;
+    for (const k in cmp.dtw.feat){ es += cmp.dtw.feat[k].meanAbs * cmp.dtw.feat[k].coverage; ew += cmp.dtw.feat[k].coverage; }
+    if (ew) dtwErr = es / ew;
+  }
+  const dtwTxt = cmp.dtw
+      ? ` · DTW-итог ${cmp.dtw.overall.toFixed(1)}%${dtwErr != null ? ` · Δ ${dtwErr.toFixed(1)}°` : ""}`
+      : "";
+  const errTxt = avgErr != null ? ` · Δ ${avgErr.toFixed(1)}°` : "";
   $("scoreSub").textContent = overall == null
       ? "запустите сравнение"
-      : `живой ~${LIVE} фр${session == null ? "" : ` · сессия ${session.toFixed(1)}%`}${dtwTxt}${lMv < winS.length ? ` · застыл ${winS.length - lMv} из ${winS.length}` : ""}`;
+      : `живой ~${LIVE} фр${errTxt}${session == null ? "" : ` · сессия ${session.toFixed(1)}%`}${dtwTxt}${lMv < winS.length ? ` · застыл ${winS.length - lMv} из ${winS.length}` : ""}`;
 
   let per = "";
   for (const f of FEATURES){
@@ -457,6 +497,15 @@ function cmpUpdateUI(){
     const rw = refW(f);
     if (rw < 1) tip += ` · вес ${rw.toFixed(2)}`;
     if (ov != null && ov < 98) tip += ` · покр. ${Math.round(ov)}%`;
+    // ошибка по фиче в °: финальный DTW (meanAbs) или живое Δ по окну
+    let errDeg = null;
+    if (cmp.dtw && cmp.dtw.feat[key]) errDeg = cmp.dtw.feat[key].meanAbs;
+    else {
+      let eF = 0, eFn = 0;
+      for (const sm of winS){ if (sm.e[key] != null){ eF += sm.e[key]; eFn++; } }
+      if (eFn) errDeg = eF / eFn;
+    }
+    if (errDeg != null) tip += ` · Δ ${errDeg.toFixed(1)}°`;
     per += `<div class="frow"><span>${f.name}</span>${bar}<b>${mp == null ? "—" : Math.round(mp) + "%"}</b><i>${tip}</i></div>`;
   }
   $("ffePer").innerHTML = per;
@@ -803,6 +852,7 @@ async function startCompare(){
 
   cmp.samples = []; cmp.featSum = {}; cmp.featW = {}; cmp.featN = {}; cmp.framesTotal = 0; cmp.aWin = {};
   cmp.gate = {}; cmp.gateSum = {}; cmp.gateN = {};
+  cmp.sigmaNoise = {}; cmp.sigmaFrozen = {}; cmp.resid = {};
   const exEl0 = $("exTimer"); if (exEl0) exEl0.textContent = "0:00";
   cmp.frames = 0; cmp.everyN = 0;
   cmp.camTS = s.lmB?._lastTs ?? 0;      // таймстампы растут и между запусками: graph не
@@ -957,6 +1007,10 @@ function downloadCSV(){
     rng[f.key] = p && p.rng != null ? Math.round(p.rng) : null;
     cov[f.key] = p ? +(p.cov || 0).toFixed(2) : null;
   }
+  const sig = {};
+  for (const f of FEATURES) if (cmp.sigmaNoise[f.key] != null) sig[f.key] = +cmp.sigmaNoise[f.key].toFixed(2);
+  const dtwErrF = {};
+  if (cmp.dtw) for (const k in cmp.dtw.feat) dtwErrF[k] = +cmp.dtw.feat[k].meanAbs.toFixed(2);
   const meta = {
     ver: "2026-08-11.world", t: new Date().toISOString(),
     mode: cmp.modeAtStart || (s.camOn ? "camera" : "file"),
@@ -969,6 +1023,7 @@ function downloadCSV(){
     aProf: cmp.aProf ? { N: cmp.aProf.N, det: cmp.aProf.det, holdish: !!cmp.aProf.holdish, type: cmp.aProf.type } : null,
     aRng: rng, aCov: cov,
     mask: fkeys, weights: featWeights(),
+    sigmaNoise: sig, dtwErr: dtwErrF,
     dtw: cmp.dtw ? +cmp.dtw.overall.toFixed(1) : null,
     session: session != null ? +session.toFixed(1) : null,
     score: cmp.score, maxCombo: cmp.maxCombo,
@@ -977,7 +1032,7 @@ function downloadCSV(){
   rows.push(["#", "META", JSON.stringify(meta)]);
   rows.push([]);
   const head = ["#","эл(мс)","tA","tB","лаг(мс)","движение",
-    ...fkeys.flatMap(k => [k+"A", k+"B", k+"tAt", k+"sim", k+"w", k+"cov"]),
+    ...fkeys.flatMap(k => [k+"A", k+"B", k+"tAt", k+"err", k+"sim", k+"w", k+"cov"]),
     "сходство%","score","combo","tier"];
   rows.push(head);
   const durS = vA.duration > 0 ? vA.duration : (vB.duration > 0 ? vB.duration : 60);
@@ -999,6 +1054,7 @@ function downloadCSV(){
       row.push(a != null ? a.toFixed(2) : "");
       row.push(b != null ? b.toFixed(2) : "");
       row.push(taA != null ? taA.toFixed(2) : "");
+      row.push(s2.e[k] != null ? s2.e[k].toFixed(2) : "");
       const sim = (a != null && b != null) ? softSim(Math.abs(a - b), thr) : null;
       row.push(sim != null ? sim.toFixed(3) : "");
       row.push((s2.w[k] || 0).toFixed(3));
@@ -1023,8 +1079,8 @@ function downloadCSV(){
     rows.push(row);
   }
   rows.push([]);
-  rows.push(["ИТОГ","","","","","", ...Array(fkeys.length * 6).fill(""), session == null ? "" : session.toFixed(1)]);
-  if (cmp.dtw) rows.push(["DTW","","","","","", ...Array(fkeys.length * 6).fill(""), cmp.dtw.overall.toFixed(1)]);
+  rows.push(["ИТОГ","","","","","", ...Array(fkeys.length * 7).fill(""), session == null ? "" : session.toFixed(1)]);
+  if (cmp.dtw) rows.push(["DTW","","","","","", ...Array(fkeys.length * 7).fill(""), cmp.dtw.overall.toFixed(1)]);
   const done = cmp.repScores.filter(r => r.pct != null);
   rows.push(["ОЦЕНКА","счёт","макс. комбо","повторы","тип","", `ср. повторов: ${done.length ? (done.reduce((a, r) => a + r.pct, 0) / done.length).toFixed(1) + "%" : ""}`]);
   rows.push(["", fmtN(cmp.score), cmp.maxCombo ? "×" + cmp.maxCombo : "", done.length, cmp.exType || "auto"]);

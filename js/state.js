@@ -30,5 +30,6 @@ export const cmp = {
   score:null, combo:0, maxCombo:0, tier:null, tierCol:null,
   detB:{}, repScores:[], exType:null, primary:null, amp:25,
   dtw:null, tag:"",
-  aProf:null, maskApplied:false, gate:{}, gateSum:{}, gateN:{}
+  aProf:null, maskApplied:false, gate:{}, gateSum:{}, gateN:{},
+  sigmaNoise:{}, sigmaFrozen:{}, resid:{}
 };
