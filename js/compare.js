@@ -183,6 +183,12 @@ function cmpAddSample(va, vb){
     const g = syncGate(f.key, win);
     gates[f.key] = g;
     cmp.gate[f.key] = g;
+    // сессионный средний gate: только осмысленные корреляции (g===2 — «нет
+    // сигнала/не судить» и не должен раздувать среднее до порога гейта)
+    if (g !== 2){
+      cmp.gateSum[f.key] = (cmp.gateSum[f.key] || 0) + g;
+      cmp.gateN[f.key] = (cmp.gateN[f.key] || 0) + 1;
+    }
   }
   const gated = k => { const g = gates[k]; return g !== 2 && g < SYNC_MIN; };
   let any = false;
@@ -276,6 +282,20 @@ function cmpAddSample(va, vb){
 function finalDTW(){
   if (cmp.samples.length < 10) return;
   const thr = Number($("thr").value);
+  // Полоса выравнивания: медианный шаг сэмплов × 2с (макс. «прощение задержки»).
+  // Кап не даёт пути «растянуться» на 12% длительности длинного видео и копить
+  // время/память O(n·K); delay1 (сдвиг 1с) укладывается.
+  const dts = [];
+  for (let i = 1; i < cmp.samples.length; i++){
+    const d = cmp.samples[i].tA - cmp.samples[i-1].tA;
+    if (d > 0 && d < 1) dts.push(d);
+  }
+  let sps = 30;
+  if (dts.length){
+    dts.sort((x, y) => x - y);
+    sps = 1 / dts[Math.floor(dts.length / 2)];
+  }
+  const band = Math.max(4, Math.round(2 * sps));
   const feat = {}; let any = false;
   for (const f of FEATURES){
     if (!featOn(f)) continue;
@@ -284,14 +304,15 @@ function finalDTW(){
       if (sm.a[f.key] != null && sm.b[f.key] != null){ a.push(sm.a[f.key]); b.push(sm.b[f.key]); }
     }
     if (a.length < 5 || b.length < 5) continue;
-    const res = dtwAlign(a, b, thr);
+    const res = dtwAlign(a, b, thr, band);
     if (res){
       // форма-гейт на итоге: не повторяющий форму человек не должен получить % даже при близких углах.
       // Почти-статические фичи уже обходит syncGate (gate===2), поэтому честное совпадение шума
       // не зануляется; здесь достаточно безусловного зануления при низкой корреляции формы.
       // meanAbs <= thr*0.5: сам DTW доказал, что форма повторяется (одинаковые видео),
       // — полу-статичные фичи с шумовой корреляцией гейта не зануляем (иначе % гуляет 64↔100).
-      const g = cmp.gate[f.key];
+      // gate берём как среднее по сессии (не последний сэмпл — иначе скачок в конце решает всё).
+      const g = cmp.gateN[f.key] ? cmp.gateSum[f.key] / cmp.gateN[f.key] : cmp.gate[f.key];
       if (g !== 2 && g < SYNC_MIN && res.meanAbs > thr * 0.5) res.meanSim = 0;
       feat[f.key] = res; any = true;
     }
@@ -444,9 +465,12 @@ function cmpUpdateUI(){
 // ── загрузка видео в поля A/B ──
 function loadCmp(video, canvas, ctx_, info, file, key){
   if (!file) return;
+  if (cmp["blobUrl" + key]){ try { URL.revokeObjectURL(cmp["blobUrl" + key]); } catch(_){} }
   cmp["lastTime"+key] = -1;
   cmp["smooth"+key] = [];
-  video.src = URL.createObjectURL(file);
+  const url = URL.createObjectURL(file);
+  cmp["blobUrl" + key] = url;
+  video.src = url;
   canvas.hidden = true;
   info.textContent = `${file.name} (${(file.size/1048576).toFixed(1)} МБ)`;
   cmp["name"+key] = file.name;
@@ -767,6 +791,7 @@ async function startCompare(){
   }
 
   cmp.samples = []; cmp.featSum = {}; cmp.featW = {}; cmp.featN = {}; cmp.framesTotal = 0; cmp.aWin = {};
+  cmp.gate = {}; cmp.gateSum = {}; cmp.gateN = {};
   const exEl0 = $("exTimer"); if (exEl0) exEl0.textContent = "0:00";
   cmp.frames = 0; cmp.everyN = 0;
   cmp.camTS = s.lmB?._lastTs ?? 0;      // таймстампы растут и между запусками: graph не
@@ -995,9 +1020,11 @@ function downloadCSV(){
   const csv = rows.map(r => r.map(c => `"${String(c == null ? "" : c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
   const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
+  a.href = url;
   a.download = `compare_angles_${Date.now() >> 10}.csv`;
   a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ── пресеты упражнений · задержка · амплитуда ──

@@ -11,6 +11,9 @@
 #               cam-identical: A=0808, камера(B)=0808 → >=70% и лаг статус ≠ 0 (компенсация liveMatch)
 #               cam-foreign:   A=0808, камера(B)=clip1 → <=50%
 #
+# Фикстуры (видео) лежат в tests/fixtures/ и отдаются сервером по /tests/fixtures/*;
+# some/ и прочее приложение снаружи закрыто whitelist'ом (проверяется отдельно).
+#
 # Считается честный ИТОГ = cmp.dtw.overall (DTW), иначе session.
 # В сравнении не должен проскочить NaN (фикс «0% вместо NaN%»).
 #
@@ -32,6 +35,7 @@ import json
 import re
 from pathlib import Path
 import urllib.request
+import urllib.error
 
 try:
     from playwright.sync_api import sync_playwright
@@ -46,8 +50,9 @@ except Exception:
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-V0808 = ROOT / "some" / "test-video" / "0808.mp4"
-VYOG = ROOT / "some" / "test-video" / "clip1.mp4"
+FIX = HERE / "fixtures"
+V0808 = FIX / "0808.mp4"
+VYOG = FIX / "clip1.mp4"
 
 SCENARIOS = [
     {"name": "identical", "a": V0808, "b": V0808, "shift": 0.0, "min": 85, "max": 101},
@@ -56,7 +61,7 @@ SCENARIOS = [
     {"name": "yoga",      "a": VYOG,  "b": VYOG,  "shift": 0.0, "min": 80, "max": 101},
 ]
 # Камерные сценарии: «камера» = тот же файл, но через getUserMedia→canvas.captureStream.
-# cam — имя файла в some/test-video/, который играет фейковая камера.
+# cam — имя файла в tests/fixtures/, который играет фейковая камера.
 CAM_SCENARIOS = [
     {"name": "cam-identical", "a": V0808, "cam": "0808.mp4", "min": 70, "max": 101},
     {"name": "cam-foreign",   "a": V0808, "cam": "clip1.mp4", "min": 0,  "max": 50},
@@ -66,7 +71,7 @@ TIMEOUT = 300
 
 # Headless-камера: переопределяем getUserMedia ещё ДО загрузки страницы.
 # Возвращает canvas.captureStream, который рисует кадры видео-файла (эмуляция
-# камеры). Источник задаётся тестом: window.__fakeCamSrc = URL в some/test-video/.
+# камеры). Источник задаётся тестом: window.__fakeCamSrc = URL в tests/fixtures/.
 # Лаг: видео камеры стартует через __fakeCamLagMs мс после старта эталона A
 # (детектируем vA.currentTime > 0.05) — так камера честно «отстаёт», как в реальности.
 FAKE_CAM_INIT = r"""
@@ -221,6 +226,19 @@ def collect_result(pg, extra_keys=()):
             samples: c.samples.length,
             session: sess,
             dtw: c.dtw ? c.dtw.overall : null,
+            dtwFeat: (() => {
+                const f = c.dtw && c.dtw.feat;
+                if (!f) return null;
+                const o = {};
+                for (const k in f) o[k] = {
+                    sim: +f[k].meanSim.toFixed(3),
+                    abs: +f[k].meanAbs.toFixed(2),
+                    cov: +f[k].coverage.toFixed(2),
+                    gate: (c.gateN[k] ? c.gateSum[k] / c.gateN[k] : c.gate[k]) != null
+                        ? +(c.gateN[k] ? c.gateSum[k] / c.gateN[k] : c.gate[k]).toFixed(3) : null,
+                };
+                return o;
+            })(),
             exType: c.exType,
             score: c.score,
             maxCombo: c.maxCombo,
@@ -305,7 +323,7 @@ def run_camera(pg, sc):
         raise RuntimeError(f"нет видео {sc['a']}")
     load_a(pg, sc["a"])
     pg.evaluate("""(cfg) => { window.__fakeCamSrc = cfg.url; window.__fakeCamLagMs = cfg.lag; }""",
-                {"url": f"http://localhost:8000/some/test-video/{sc['cam']}", "lag": 400})
+                {"url": f"http://localhost:8000/tests/fixtures/{sc['cam']}", "lag": 400})
     pg.click("#srcBCam")
     pg.click("#camBtn")
     pg.wait_for_function("() => window.__camOn() === true", timeout=30000)
@@ -354,13 +372,15 @@ def main():
         if a is None:
             continue
         if a == "--reps":
-            reps = int(argv[i + 1])
-            argv[i] = argv[i + 1] = None
+            if i + 1 < len(argv):
+                reps = int(argv[i + 1])
+                argv[i] = argv[i + 1] = None
         elif a.startswith("--reps="):
             reps = int(a.split("=", 1)[1])
             argv[i] = None
     for a in (x for x in argv if x is not None):
-        m = re.match(r"^(\w+)([<>])(\d+(?:\.\d+)?)$", a)
+        # \w не матчит дефис в cam-* — поэтому [\w-]
+        m = re.match(r"^([\w-]+)([<>])(\d+(?:\.\d+)?)$", a)
         if m:
             name, op, val = m.group(1), m.group(2), float(m.group(3))
             sc = next((s for s in SCENARIOS + CAM_SCENARIOS if s["name"] == name), None)
@@ -371,6 +391,20 @@ def main():
     server = start_server()
     failed = 0
     skipped = 0
+    # Приватность: some/ и прочее не должно отдаваться наружу.
+    try:
+        priv = urllib.request.urlopen("http://localhost:8000/some/test-video/0808.mp4", timeout=5)
+        priv_code = priv.getcode()
+        priv.close()
+    except urllib.error.HTTPError as e:
+        priv_code = e.code
+    except Exception:
+        priv_code = None
+    if priv_code != 404:
+        failed += 1
+        print(f"=== whitelist — FAIL: /some/test-video/0808.mp4 отдал {priv_code}, ожидалось 404 ===")
+    else:
+        print("=== whitelist — PASS: /some/* закрыт (404) ===")
     try:
         with sync_playwright() as pw:
             b = pw.chromium.launch(headless=True)
@@ -382,6 +416,11 @@ def main():
             pg.evaluate("smc => { document.querySelector('#smC').value = String(smc); }", SM_C)
 
             for sc in SCENARIOS:
+                miss = [p for p in (sc["a"], sc["b"]) if not p.exists()]
+                if miss:
+                    skipped += 1
+                    print(f"=== {sc['name']} — SKIP (нет видео: {', '.join(str(m) for m in miss)}) ===")
+                    continue
                 runs = []
                 for it in range(reps):
                     res = run_scenario(pg, sc)
@@ -445,6 +484,12 @@ def main():
 
             if not nofull and not skip_camera:
                 for cs in CAM_SCENARIOS:
+                    cam_f = FIX / cs["cam"]
+                    miss = [p for p in (cs["a"], cam_f) if not p.exists()]
+                    if miss:
+                        skipped += 1
+                        print(f"=== {cs['name']} — SKIP (нет видео: {', '.join(str(m) for m in miss)}) ===")
+                        continue
                     res = run_camera(pg, cs)
                     if "error" in res:
                         print(f"=== {cs['name']} — ERROR: {res['error']} (камера не дала кадров в headless?) ===")

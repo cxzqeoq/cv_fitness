@@ -1,0 +1,6 @@
+{
+  "name": "pose-js",
+  "private": true,
+  "type": "module",
+  "description": "ES-модули приложения; type:module — чтобы чистые модули (dtw, features, utils) импортировались в Node для юнит-тестов."
+}

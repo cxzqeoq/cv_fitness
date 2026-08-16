@@ -5,41 +5,49 @@ import { softSim } from "./utils.js";
 
 // Оффлайн-выравнивание двух равночастотных рядов углов:
 //   a, b — plain-массивы значений по возрастанию времени (време/шаг одинаковый),
-//   thr — допуск для softSim.
+//   thr — допуск для softSim,
+//   band — кап полосы Сакоэ–Чибы в сэмплах (необязательно): если задан,
+//          K = max(4, min(12%·max(n,m), band)) — не даёт пути «простить» больше
+//          заданного времени (по умолчанию без band K = 12%·max(n,m)).
 // Возвращает { meanSim, coverage, meanAbs } или null при недостатке данных.
-export function dtwAlign(a, b, thr){
+export function dtwAlign(a, b, thr, band){
   const n = a.length, m = b.length;
   if (n < 2 || m < 2) return null;
-  const K = Math.max(4, Math.round(Math.max(n, m) * 0.12));
+  const k12 = Math.round(Math.max(n, m) * 0.12);
+  const K = Math.max(4, band == null ? k12 : Math.min(k12, band));
   const INF = 1e18;
-  const dp = new Array(n), prev = new Array(n);
-  for (let i = 0; i < n; i++){ dp[i] = new Array(m).fill(INF); prev[i] = new Array(m).fill(-1); }
-  dp[0][0] = Math.abs(a[0] - b[0]);
-  for (let j = 1; j <= K && j < m; j++){ dp[0][j] = dp[0][j-1] + Math.abs(a[0] - b[j]); prev[0][j] = 0; }
+  // 2-row DP: храним только текущую и предыдущую строки полосы (стоимость + длина
+  // пути). Полная матрица n×m на длинных сессиях (finalDTW по 40-мин видео)
+  // укладывала гигабайты — здесь память O(m), время O(n·K).
+  let dp = new Array(m), len = new Array(m);   // текущая строка
+  let dP = new Array(m), lP = new Array(m);    // предыдущая
+  for (let j = 0; j < m; j++){ dp[j] = INF; len[j] = 0; }
+  // строка 0: только полоса вправо
+  const b1 = Math.min(K, m - 1);
+  dp[0] = Math.abs(a[0] - b[0]); len[0] = 1;
+  for (let j = 1; j <= b1; j++){ dp[j] = dp[j-1] + Math.abs(a[0] - b[j]); len[j] = j + 1; }
   for (let i = 1; i < n; i++){
+    const t = dP; dP = dp; dp = t;
+    const tl = lP; lP = len; len = tl;
     const j0 = Math.max(0, i - K), j1 = Math.min(m - 1, i + K);
+    const p0 = Math.max(0, i - 1 - K), p1 = Math.min(m - 1, i - 1 + K);
+    for (let j = Math.max(0, j0 - 1); j <= j1; j++){ dp[j] = INF; len[j] = 0; }
     for (let j = j0; j <= j1; j++){
-      let best = INF, bp = -1;
-      if (j - 1 >= 0 && Math.abs(i - (j - 1)) <= K && dp[i][j-1] < best){ best = dp[i][j-1]; bp = 1; }
-      if (dp[i-1][j] < best){ best = dp[i-1][j]; bp = 0; }
-      if (j - 1 >= 0 && dp[i-1][j-1] < best){ best = dp[i-1][j-1]; bp = 2; }
-      if (bp >= 0) dp[i][j] = best + Math.abs(a[i] - b[j]);
-      prev[i][j] = bp;
+      let best = INF, blen = 0;
+      const cost = Math.abs(a[i] - b[j]);
+      if (j > j0 && dp[j-1] < INF){ best = dp[j-1]; blen = len[j-1]; }
+      if (j >= p0 && j <= p1 && dP[j] < INF && dP[j] < best){ best = dP[j]; blen = lP[j]; }
+      if (j - 1 >= p0 && j - 1 <= p1 && dP[j-1] < INF && dP[j-1] < best){ best = dP[j-1]; blen = lP[j-1]; }
+      if (best < INF){ dp[j] = best + cost; len[j] = blen + 1; }
     }
   }
-  if (dp[n-1][m-1] >= INF) return null;
-  let i = n - 1, j = m - 1, sum = 0, pairs = 0;
-  while (i > 0 || j > 0){
-    sum += Math.abs(a[i] - b[j]); pairs++;
-    const pd = prev[i][j];
-    if (pd === 0) { if (i > 0) i--; else j--; }
-    else if (pd === 1) { if (j > 0) j--; else i--; }
-    else { if (i > 0) i--; if (j > 0) j--; }
-  }
-  sum += Math.abs(a[0] - b[0]); pairs++;
-  const meanAbs = sum / pairs;
+  // Финальная ячейка (n-1, m-1) достижима в полосе только если |n-1-(m-1)| <= K.
+  // Проверка обязательна: при выходе за полосу dp[m-1] держал бы устаревшее
+  // значение прошлой строки (ряды переиспользуются), а не INF, как в полной матрице.
+  if (Math.abs(n - 1 - (m - 1)) > K || dp[m-1] >= INF) return null;
+  const meanAbs = dp[m-1] / len[m-1];
   const meanSim = softSim(meanAbs, thr);
-  const coverage = Math.min(1, pairs / Math.max(n, m));
+  const coverage = Math.min(1, len[m-1] / Math.max(n, m));
   return { meanSim, coverage, meanAbs };
 }
 

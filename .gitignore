@@ -1,3 +1,4 @@
 some/
+tests/fixtures/
 __pycache__/
 *.pyc

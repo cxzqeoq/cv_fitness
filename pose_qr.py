@@ -9,23 +9,18 @@
 
 Требует: pip install segno   (и npx для туннеля).
 """
-import mimetypes
 import os
 import re
 import shutil
-import socket
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import webbrowser
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 
-# JS грузится как ES-модули — важны корректные MIME-типы.
-# На Windows mimetypes смотрит в реестр и может отдать .js как text/plain.
-mimetypes.add_type("text/javascript", ".js")
-mimetypes.add_type("text/javascript", ".mjs")
+from pose_http import NoCacheHandler, lan_ip
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -34,17 +29,6 @@ HINT = (
     "Если localhost показал предупреждение — нажми «Bypass/Continue».\n"
     "Разреши доступ к камере. Ctrl+C в консоли — остановить."
 )
-
-
-def lan_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
-    except Exception:
-        return "127.0.0.1"
-    finally:
-        s.close()
 
 
 def tunnel_url(port):
@@ -138,7 +122,7 @@ def main():
     ip = lan_ip()
     local_url = f"http://{ip}:{port}/"
 
-    handler = SimpleHTTPRequestHandler
+    handler = NoCacheHandler
     server = ThreadingHTTPServer(("0.0.0.0", port), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f"Локальный сервер: http://localhost:{port}/")

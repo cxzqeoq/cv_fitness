@@ -11,6 +11,7 @@ const v = $("v"), cv = $("cv"), ctx = cv.getContext("2d", { alpha:true });
 let landmarker = null, running = false, lastTs = -1, lastTime = -1, lastRes = null;
 let recorder = null, chunks = [], frames = 0, t0 = 0;
 let smoothPoses = [];
+let blobUrl = null;
 
 const pc = { w:1, col:"#c6ff2e", style:"stick", bg:"video",
              parts:{ head:true, torso:true, arms:true, legs:true } };
@@ -195,8 +196,10 @@ export function isRunning(){ return running; }
 // Выбор видеофайла: подставляем blob-URL, активируем «Запустить».
 export function loadFile(f){
   if (!f) return;
+  if (blobUrl){ try { URL.revokeObjectURL(blobUrl); } catch(_){} }
   lastRes = null; lastTime = -1; smoothPoses = [];
-  v.src = URL.createObjectURL(f);
+  blobUrl = URL.createObjectURL(f);
+  v.src = blobUrl;
   $("go").disabled = false;
   $("vinfo").textContent = `${f.name} (${(f.size/1048576).toFixed(1)} МБ)`;
   say(`${f.name} — читаю…`);
@@ -239,11 +242,13 @@ async function run(){
         const blob = new Blob(chunks, { type: mime });
         const a = $("dl") || document.createElement("a");
         a.id = "dl";
-        a.href = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
+        a.href = url;
         a.download = "record_pose." + (mime.startsWith("video/mp4") ? "mp4" : "webm");
         a.textContent = "скачать " + a.download;
         $("status").after(a);
         a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       };
       recorder.start();
       $("recOn").classList.add("on");

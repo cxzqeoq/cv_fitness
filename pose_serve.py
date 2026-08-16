@@ -1,36 +1,11 @@
 #!/usr/bin/env python3
-import mimetypes
 import os
-import socket
 import sys
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 
-# JS грузится как ES-модули — важны корректные MIME-типы.
-# На Windows mimetypes смотрит в реестр и может отдать .js как text/plain.
-mimetypes.add_type("text/javascript", ".js")
-mimetypes.add_type("text/javascript", ".mjs")
-
-
-# Запрет кэширования: иначе браузер кэширует ES-модули по отдельности и после
-# правок может держать старый utils.js при новых импортёрах (ошибка «doesn't
-# provide an export named …»). Каждый запрос должен всегда брать свежий файл.
-class NoCacheHandler(SimpleHTTPRequestHandler):
-    def end_headers(self):
-        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-        super().end_headers()
+from pose_http import NoCacheHandler, lan_ip
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-
-def lan_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
-    except Exception:
-        return "127.0.0.1"
-    finally:
-        s.close()
 
 
 def main():
