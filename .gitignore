@@ -1,4 +1,9 @@
 some/
 tests/fixtures/
+segtest/data/
+segtest/results/
+segtest/try/
+segtest/videos/
+segtest/models/
 __pycache__/
 *.pyc
