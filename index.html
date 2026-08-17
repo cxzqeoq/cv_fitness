@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Скелет поверх видео · v2</title>
+<title>CV Fitness</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="wrap">
-  <h1>Скелет поверх видео <small>· v2</small></h1>
-  <div class="sub">Всё считается на этом ноутбуке, в браузере. Видео никуда не отправляется.</div>
+  <h1>CV Fitness</h1>
+  <div class="sub">Видео никуда не отправляется.</div>
 
   <div class="tabs">
     <button id="tabSingle" class="act">Один</button>
@@ -139,6 +139,10 @@
           </select>
         </label>
         <span class="mono" id="exTip" style="min-width:0"></span>
+        <label class="f" title="Прощение задержки повтора: 0 — строго в темп; больше — прощает отставание человека. Итог всегда честный (DTW)">
+          Задержка <input type="range" id="lagWin" min="0" max="2" step="0.5" value="2">
+          <span id="lagWinV" class="mono">2.0 с</span>
+        </label>
         <span style="flex:1"></span>
         <label class="f" id="cntWrap" hidden>Подготовка
           <select id="cnt">
@@ -155,7 +159,7 @@
       <details class="setbox" id="settingsBox">
         <summary>Настройки</summary>
         <div class="crow">
-          <span class="mono" style="min-width:0">Скелет:</span>
+          <span class="grp">Отрисовка</span>
           <label class="f">Стиль
             <select id="styleC">
               <option value="stick">палочки</option>
@@ -182,7 +186,7 @@
           <label class="c"><input type="checkbox" id="cLegs" checked> ноги</label>
         </div>
         <div class="crow">
-          <span class="mono" style="min-width:0">Фичи:</span>
+          <span class="grp">Фичи</span>
           <label class="chip"><input type="checkbox" id="chk_lElbow" checked> локоть L</label>
           <label class="chip"><input type="checkbox" id="chk_rElbow" checked> локоть R</label>
           <label class="chip"><input type="checkbox" id="chk_lKnee" checked> колено L</label>
@@ -194,18 +198,18 @@
           <label class="chip"><input type="checkbox" id="chk_twist" checked> кручение</label>
         </div>
         <div class="crow">
+          <span class="grp">Точность</span>
           <label class="f" title="Отклонение до этой величины считается идеальным сходством">
             Допуск <input type="range" id="thr" min="5" max="60" step="1" value="40">
             <span id="thrv" class="mono">40°</span>
-          </label>
-          <label class="f" title="Прощение задержки повтора: 0 — строго в темп; больше — прощает отставание человека. Итог всегда честный (DTW)">
-            Задержка <input type="range" id="lagWin" min="0" max="2" step="0.5" value="2">
-            <span id="lagWinV" class="mono">2.0 с</span>
           </label>
           <label class="f" title="Амплитуда, при которой засчитывается цикл повтора/фазы">
             Амплитуда <input type="range" id="repAmp" min="5" max="50" step="1" value="25">
             <span id="repAmpV" class="mono">25°</span>
           </label>
+        </div>
+        <div class="crow">
+          <span class="grp">Действия</span>
           <label class="f" title="Громкость звука видео (эталон A, просмотр, режим «Один»)">
             Звук <input type="range" id="vol" min="0" max="100" step="1" value="50">
             <span id="volV" class="mono">50%</span>
@@ -288,16 +292,7 @@
     <b>Горячие клавиши:</b> <kbd>Пробел</kbd> пуск/стоп &middot; <kbd>Esc</kbd> стоп &middot;
     <kbd>B</kbd> фон &middot; <kbd>S</kbd> стиль &middot; <kbd>R</kbd> запись &middot; <kbd>P</kbd> число людей &middot;
     <kbd>H</kbd> голова &middot; <kbd>T</kbd> корпус &middot; <kbd>A</kbd> руки &middot; <kbd>L</kbd> ноги. В режиме «Сравнение»
-    <kbd>Пробел</kbd> запускает/останавливает сопоставление.<br>
-    Модель и WASM тянутся с CDN один раз и кэшируются. Совсем без сети: скачайте
-    <code>pose_landmarker_lite.task</code> и подсуньте его во второе поле первого режима.
-    Точность = среднее по фичам и кадрам от <code>max(0, 1 − |Δ|/допуск)</code>; в режиме камеры
-    сравнение идёт со скользящим окном ±2 с (чтобы компенсировать задержку повторения). Сравнение идёт
-    от отмеченного кадра; у разных по длине видео — до конца более короткого. «Подготовка» даёт обратный
-    отсчёт 3/5/10 с перед стартом, чтобы успеть встать в начальную позу.<br>
-    <b>Камера на телефоне:</b> запустить <code>python pose_serve.py</code> на ноутбуке, затем HTTPS-туннель
-    (<code>npx localtunnel --port 8000</code> или <code>cloudflared tunnel --url http://localhost:8000</code>) и
-    открыть полученную ссылку на телефоне. Картинка с камеры не покидает страницу.
+    <kbd>Пробел</kbd> запускает/останавливает сопоставление.
   </div>
   <div id="diag"></div>
 </div>

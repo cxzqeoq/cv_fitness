@@ -144,3 +144,4 @@ kbd{color:#8fa0a8;border:1px solid var(--line);border-radius:3px;padding:0 5px;f
 .setbox summary::-webkit-details-marker{display:none}
 .setbox summary::before{content:"⚙ "}
 .setbox[open] summary{color:var(--ink);margin-bottom:8px}
+.setbox .grp{flex-basis:100%;font-size:11px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
