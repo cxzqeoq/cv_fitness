@@ -253,6 +253,56 @@ export function madNormalize(windows){
   return norms;
 }
 
+// Локальная нормализация: med/MAD каждого окна — по окрестности [tMid−radiusSec, tMid+radiusSec].
+// Делает сигнал инвариантным к длине видео (глобальная нормализация по всей длине даёт разный
+// масштаб для 10-мин части и 40-мин целого). Края — клэмп (короткие видео ≈ глобальная).
+// capGlobal: ограничить локальный MAD сверху глобальным (mad_eff = min(local, global)) —
+// защита от подавления плотных регионов (локальный MAD там раздувается соседними переходами).
+// Возвращает массив norms[индексОкна] → {comp → {med, mad}}.
+export function madNormalizeLocal(windows, radiusSec = 120, capGlobal = false){
+  const n = windows.length;
+  const ts = windows.map(w => w.tMid);
+  const comps = [];
+  const seen = new Set();
+  for (const w of windows){
+    const sig = w.sig;
+    if (!sig) continue;
+    for (const [key, val] of Object.entries(sig)){
+      if (!val) continue;
+      for (const c of Object.keys(val)){
+        if (!isFinite(val[c])) continue;
+        const ck = key + "." + c;
+        if (!seen.has(ck)){ seen.add(ck); comps.push([key, c]); }
+      }
+    }
+  }
+  const globalN = capGlobal ? madNormalize(windows) : null;
+  const out = new Array(n);
+  for (let i = 0; i < n; i++){
+    const t = ts[i];
+    let lo = i, hi = i;
+    while (lo > 0 && ts[lo - 1] >= t - radiusSec) lo--;
+    while (hi < n - 1 && ts[hi + 1] <= t + radiusSec) hi++;
+    const norms = {};
+    for (const [key, c] of comps){
+      const ck = key + "." + c;
+      const vals = [];
+      for (let j = lo; j <= hi; j++){
+        const v = windows[j].sig && windows[j].sig[key] && windows[j].sig[key][c];
+        if (isFinite(v)) vals.push(v);
+      }
+      const med = median(vals);
+      if (med == null){ norms[ck] = { med: 0, mad: 0 }; continue; }
+      let mad = median(vals.map(v => Math.abs(v - med))) * 1.4826;
+      if (capGlobal && globalN[ck] && isFinite(globalN[ck].mad) && globalN[ck].mad > 0)
+        mad = Math.min(mad, globalN[ck].mad);
+      norms[ck] = { med, mad };
+    }
+    out[i] = norms;
+  }
+  return out;
+}
+
 // ── расстояния ──
 // Разность по одному признаку (RMS по компонентам, в нормализованном виде).
 export function compDiff(key, a, b, norms){
@@ -330,8 +380,8 @@ export function contextDistance(windows, t, norms, ctxSec = WINDOW){
 
 // Автопорог из перцентилей сигнала: high = pctHigh, low = pctLow.
 // Возвращает {high, low} или null, если сигнал слишком мал/вырожден.
-export function autothreshold(sig, pctHigh = 0.95, pctLow = 0.7){
-  const vals = sig.map(s => s.comb).filter(v => v != null && isFinite(v));
+export function autothreshold(sig, pctHigh = 0.95, pctLow = 0.7, channel = "comb"){
+  const vals = sig.map(s => s[channel]).filter(v => v != null && isFinite(v));
   if (vals.length < 10) return null;
   const p = q => {
     const a = [...vals].sort((x, y) => x - y);
@@ -345,36 +395,57 @@ export function autothreshold(sig, pctHigh = 0.95, pctLow = 0.7){
 }
 
 // Кандидаты-интервалы с гистерезисом: вход > high, выход < low.
-// sig: [{t, comb, Dm, Dp}]. Возвращает [{startT, endT, peak, peakT, boundary, conf, Dm, Dp}].
+// sig: [{t, comb, Dm, Dp, chg?}]. Возвращает [{startT, endT, peak, peakT, boundary, conf, Dm, Dp}].
 // boundary — первый образец на нарастании ≥ base + frac·(peak−base) (frac≈0.7);
-// conf — высота подъёма peak−base.
-export function detectCandidates(sig, high, low, frac = 0.7){
+// conf — высота подъёма peak−base. channel — по какому полю детектировать.
+export function detectCandidates(sig, high, low, frac = 0.7, channel = "comb"){
   const out = [];
   const N = sig.length;
   let state = 0, start = -1;
   for (let i = 0; i < N; i++){
-    const c = sig[i].comb;
+    const c = sig[i][channel];
     if (state === 0){
       if (c != null && c > high){ state = 1; start = i; }
     } else {
       if (c == null || c < low){
-        out.push(finish(sig, start, i - 1, frac));
+        out.push(finish(sig, start, i - 1, frac, channel));
         state = 0; start = -1;
       }
     }
   }
-  if (state === 1) out.push(finish(sig, start, N - 1, frac));
+  if (state === 1) out.push(finish(sig, start, N - 1, frac, channel));
   return out;
 }
 
-function finish(sig, a, b, frac){
+// Кандидаты по обоим каналам (combined ∪ chg=max(Dm,Dp)) с дедупом ±dupSec.
+// combined пропускает одноканальные переходы (позные/двигательные), chg их ловит.
+// opts: {frac=0.7, dupSec=3, combPct=[0.95,0.7], chgPct=[0.9,0.7]} — перцентили порогов.
+export function detectCandidatesUnion(signal, opts = {}){
+  const { frac = 0.7, dupSec = 3, combPct = [0.95, 0.7], chgPct = [0.9, 0.7] } = opts;
+  const out = [];
+  const add = list => {
+    for (const c of list){
+      const j = out.findIndex(o => Math.abs(o.boundary - c.boundary) <= dupSec);
+      if (j >= 0){ if (c.conf > out[j].conf) out[j] = c; }
+      else out.push(c);
+    }
+  };
+  const atC = autothreshold(signal, combPct[0], combPct[1], "comb");
+  const atG = autothreshold(signal, chgPct[0], chgPct[1], "chg");
+  if (atC) add(detectCandidates(signal, atC.high, atC.low, frac, "comb"));
+  if (atG) add(detectCandidates(signal, atG.high, atG.low, frac, "chg"));
+  out.sort((a, b) => a.boundary - b.boundary);
+  return out;
+}
+
+function finish(sig, a, b, frac, channel){
   let base = Infinity;
   for (let i = Math.max(0, a - 3); i <= a; i++)
-    if (sig[i].comb != null) base = Math.min(base, sig[i].comb);
+    if (sig[i][channel] != null) base = Math.min(base, sig[i][channel]);
   if (!isFinite(base)) base = 0;
   let peak = -Infinity, peakI = a;
   for (let i = a; i <= b; i++){
-    const c = sig[i].comb;
+    const c = sig[i][channel];
     if (c != null && c > peak){ peak = c; peakI = i; }
   }
   if (!isFinite(peak) || peak <= base){
@@ -383,7 +454,7 @@ function finish(sig, a, b, frac){
   }
   let bi = -1;
   for (let i = a; i <= peakI; i++){
-    const c = sig[i].comb;
+    const c = sig[i][channel];
     if (c != null && c >= base + frac * (peak - base)){ bi = i; break; }
   }
   const boundary = bi < 0 ? sig[a].t : sig[bi].t;

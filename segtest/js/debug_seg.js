@@ -9,7 +9,7 @@
 import { $, say, ensureMeta } from "./utils.js";
 import { makeLandmarker, close, clearModelCache } from "./model.js";
 import { frameDescriptors, buildWindows, madNormalize, contextDistance,
-         detectCandidates, segmentsFromCandidates, autothreshold } from "./signature.js";
+         detectCandidates, segmentsFromCandidates, autothreshold, detectCandidatesUnion } from "./signature.js";
 
 const v = document.getElementById("segVideo");
 const cv = document.getElementById("timeline");
@@ -299,7 +299,9 @@ function computeSignal(){
   const norms = madNormalize(wins);
   signal = wins.map(w => {
     const d = contextDistance(wins, w.tMid, norms, ctxSec) || {};
-    return { t: w.tMid, Dm: d.D_motion ?? null, Dp: d.D_pose ?? null, comb: d.combined ?? null };
+    const Dm = d.D_motion ?? null, Dp = d.D_pose ?? null;
+    const chg = Dm != null || Dp != null ? Math.max(Dm ?? 0, Dp ?? 0) : null;
+    return { t: w.tMid, Dm, Dp, comb: d.combined ?? null, chg };
   });
   updateCandidates();
 }
@@ -312,9 +314,11 @@ function updateCandidates(){
       $("high").value = +at.high.toFixed(3);
       $("low").value = +at.low.toFixed(3);
     }
+    cands = detectCandidatesUnion(signal, { frac: +$("frac").value, dupSec: 3, combPct: [0.95, 0.7], chgPct: [0.9, 0.7] });
+  } else {
+    const high = +$("high").value, low = +$("low").value, frac = +$("frac").value;
+    cands = detectCandidates(signal, high, low, frac, "comb");
   }
-  const high = +$("high").value, low = +$("low").value, frac = +$("frac").value;
-  cands = detectCandidates(signal, high, low, frac);
   segments = segmentsFromCandidates(cands, dur);
   drawAll();
   renderSegments();
@@ -592,7 +596,8 @@ function exportConfig(){
     settings: {
       win: +$("win").value, step: +$("step").value, ctx: +$("ctx").value,
       rate: +$("rate").value, high: +$("high").value, low: +$("low").value,
-      frac: +$("frac").value, iou: +$("iou").value
+      frac: +$("frac").value, iou: +$("iou").value,
+      norm: "global", combPct: [0.95, 0.7], chgPct: [0.9, 0.7], dup: 3
     },
     duration: dur, frames: frames.length,
     refs, cands: cands.map(c => ({ ...c, peak: +c.peak.toFixed(3), conf: +c.conf.toFixed(3) })),
@@ -603,7 +608,8 @@ function exportConfig(){
     },
     metrics: evaluate(+$("iou").value),
     signal: signal.map(s => ({ t: +s.t.toFixed(2), comb: s.comb == null ? null : +s.comb.toFixed(3),
-                              Dm: s.Dm == null ? null : +s.Dm.toFixed(3), Dp: s.Dp == null ? null : +s.Dp.toFixed(3) }))
+                              Dm: s.Dm == null ? null : +s.Dm.toFixed(3), Dp: s.Dp == null ? null : +s.Dp.toFixed(3),
+                              chg: s.chg == null ? null : +s.chg.toFixed(3) }))
   };
   const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
