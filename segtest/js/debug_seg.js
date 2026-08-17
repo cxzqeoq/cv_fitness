@@ -17,6 +17,7 @@ const cg = cv.getContext("2d");
 
 let lm = null, blobUrl = null;
 let frames = [], signal = [], cands = [], segments = [], refs = [];
+let voiceFrames = [], voiceSegs = [], voiceMeta = null, audioToken = 0, audioFailed = false;
 let running = false, cancel = false;
 let lastT = -1, lastTs = -1;
 let dur = 0;
@@ -61,11 +62,14 @@ export function loadFile(f){
   v.controls = false;
   try { v.pause(); v.currentTime = 0; } catch(_){}
   frames = []; signal = []; cands = []; segments = []; refs = [];
+  voiceFrames = []; voiceSegs = []; voiceMeta = null; audioFailed = false;
   $("progFill").style.width = "0%";
   $("prog").textContent = "";
   renderSegments();
+  renderVoice();
   $("vinfo").textContent = `${f.name} (${(f.size / 1048576).toFixed(1)} МБ)`;
   status(`выбран ${f.name} — запускаю сбор…`);
+  startAudio(f);
   scheduleRun();
 }
 
@@ -160,6 +164,132 @@ function processFrame(t){
   const w = res && res.worldLandmarks && res.worldLandmarks[0];
   const desc = w ? frameDescriptors(w) : null;
   frames.push({ time: t, desc });
+}
+
+// ── аудио: декод + детектор речи (Web Audio API, ничего не выгружается) ──
+async function decodeAudio(f){
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC({ sampleRate: 16000 });
+  try {
+    const buf = await ctx.decodeAudioData(await f.arrayBuffer());
+    const n = buf.length, ch = buf.numberOfChannels;
+    const mono = new Float32Array(n);
+    for (let c = 0; c < ch; c++){
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < n; i++) mono[i] += d[i];
+    }
+    for (let i = 0; i < n; i++) mono[i] /= ch;
+    return { mono, sr: buf.sampleRate, dur: n / buf.sampleRate };
+  } catch(_){
+    return null;
+  } finally {
+    try { ctx.close(); } catch(_){}
+  }
+}
+
+function startAudio(f){
+  const myId = ++audioToken;
+  audioFailed = false;
+  $("vstatus").textContent = "аудио: декодирую…";
+  decodeAudio(f).then(audio => {
+    if (myId !== audioToken) return;
+    if (!audio){
+      audioFailed = true;
+      $("vstatus").textContent = "аудио: нет дорожки или формат не декодируется";
+      renderVoice();
+      drawAll();
+      return;
+    }
+    computeVoice(audio);
+    renderVoice();
+    drawAll();
+    $("vstatus").textContent =
+      `аудио ${audio.dur.toFixed(0)} с · речь ${voiceMeta.spokenPct.toFixed(0)}% времени · интервалов ${voiceMeta.count}`;
+  }).catch(() => {
+    if (myId !== audioToken) return;
+    $("vstatus").textContent = "аудио: ошибка декодирования";
+    renderVoice();
+    drawAll();
+  });
+}
+
+function percentile(arr, q){
+  if (!arr.length) return 0;
+  return arr[Math.min(arr.length - 1, Math.floor(arr.length * q))];
+}
+
+// детектор речи: кадры 0.2 с (паритет с моушн-сеткой), RMS + zero-crossing,
+// авто-пороги из перцентилей (как autothreshold), медианное сглаживание,
+// склейка гэпов <1 с, отсев интервалов короче 0.7 с.
+function computeVoice(audio){
+  const { mono, sr } = audio;
+  const fr = Math.max(1, Math.round(sr * 0.2));
+  const n = Math.floor(mono.length / fr);
+  const raw = [];
+  for (let i = 0; i < n; i++){
+    let sum = 0, zc = 0, prev = 0;
+    const off = i * fr;
+    for (let j = 0; j < fr; j++){
+      const s = mono[off + j];
+      sum += s * s;
+      if (j > 0 && ((s >= 0 && prev < 0) || (s < 0 && prev >= 0))) zc++;
+      prev = s;
+    }
+    raw.push({ t: i * 0.2, rms: Math.sqrt(sum / fr), zcr: zc / fr });
+  }
+  const rmsArr = raw.map(f => f.rms).sort((a, b) => a - b);
+  const zcrArr = raw.map(f => f.zcr).sort((a, b) => a - b);
+  const tRms = Math.max(percentile(rmsArr, 0.5) * 4, 1e-3);
+  const tZcr = percentile(zcrArr, 0.9) * 1.5;
+  const maxRms = Math.max(...rmsArr, 1e-6);
+  const act = raw.map(f => f.rms > tRms && f.zcr < tZcr);
+  const mid = a => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
+  for (let i = 0; i < raw.length; i++){
+    const w = act.slice(Math.max(0, i - 2), Math.min(raw.length, i + 3));
+    raw[i].active = mid(w);
+    raw[i].score = raw[i].rms / maxRms;
+  }
+  voiceFrames = raw;
+  const segs = [];
+  let st = null;
+  for (let i = 0; i < raw.length; i++){
+    if (raw[i].active && st == null) st = i;
+    else if (!raw[i].active && st != null){
+      if (i - st < 4){ st = null; continue; }
+      const end = raw[i - 1].t + 0.2;
+      const last = segs[segs.length - 1];
+      if (last && raw[st].t - last.end < 1.0) last.end = end;
+      else segs.push({ start: raw[st].t, end });
+      st = null;
+    }
+  }
+  if (st != null && raw.length - st >= 4){
+    const end = raw[raw.length - 1].t + 0.2;
+    const last = segs[segs.length - 1];
+    if (last && raw[st].t - last.end < 1.0) last.end = end;
+    else segs.push({ start: raw[st].t, end });
+  }
+  voiceSegs = segs.map(s => ({ start: +s.start.toFixed(1), end: +s.end.toFixed(1) }));
+  const spoken = voiceSegs.reduce((a, s) => a + (s.end - s.start), 0);
+  voiceMeta = {
+    audioDur: audio.dur,
+    spokenSec: spoken,
+    spokenPct: audio.dur ? spoken / audio.dur * 100 : 0,
+    count: voiceSegs.length
+  };
+}
+
+function renderVoice(){
+  const el = $("voice");
+  if (audioFailed){ el.innerHTML = "Нет аудио-дорожки."; return; }
+  if (!voiceSegs.length){
+    el.innerHTML = voiceMeta ? "Речи не найдено" : "Выбери видео — аудио декодируется автоматически.";
+    return;
+  }
+  el.innerHTML = `<table><tr><th>№</th><th>начало</th><th>конец</th><th>длит</th></tr>` +
+    voiceSegs.map((s, i) =>
+      `<tr data-s="${s.start}"><td>${i + 1}</td><td>${fmt(s.start)}</td><td>${fmt(s.end)}</td><td>${fmt(s.end - s.start)}</td></tr>`
+    ).join("") + `</table>`;
 }
 
 // ── сигналы из кадров ──
@@ -295,16 +425,18 @@ function drawAll(){
   // фон рисуем всегда — пустой канвас не должен выглядеть как «0 кадров»
   cg.fillStyle = "#10131a"; cg.fillRect(0, 0, W, H);
   if (!dur) return;
+  const x = t => t / dur * W;
+  const VB = H - 76; // высота основной области (над треком «голос»)
   drawCoverage();
+  drawVoiceBand(W, H, VB, x);
   if (!signal.length){
     const valid = frames.length ? frames.filter(f => f.desc).length : 0;
     cg.fillStyle = "#99a"; cg.font = "12px sans-serif";
     cg.fillText(frames.length
       ? `сигнал пуст: кадров ${frames.length}, валидных дескрипторов ${valid}`
-      : "пока пусто — выбери видео и дождись сбора", 8, H / 2 - 8);
+      : "пока пусто — выбери видео и дождись сбора", 8, VB / 2 - 8);
     return;
   }
-  const x = t => t / dur * W;
   const sigMax = Math.max(1, ...signal.map(s => s.comb ?? 0)) * 1.15;
 
   // невалидные зоны (нет скелета в окне)
@@ -314,12 +446,12 @@ function drawAll(){
     if (s.comb == null){
       const x1 = i ? x((signal[i - 1].t + s.t) / 2) : 0;
       const x2 = i < signal.length - 1 ? x((s.t + signal[i + 1].t) / 2) : W;
-      cg.fillRect(x1, 0, Math.max(1, x2 - x1), H);
+      cg.fillRect(x1, 0, Math.max(1, x2 - x1), VB);
     }
   }
 
   // пороги
-  const yOf = c => H - (c / sigMax * H);
+  const yOf = c => VB - (c / sigMax * VB);
   cg.strokeStyle = "rgba(255,180,60,.8)"; cg.setLineDash([4, 4]);
   line(yOf(+$("high").value)); cg.setLineDash([]);
   cg.strokeStyle = "rgba(120,140,220,.6)"; cg.setLineDash([2, 4]);
@@ -334,10 +466,10 @@ function drawAll(){
   // кандидаты
   for (const c of cands){
     cg.fillStyle = "rgba(255,80,80,.22)";
-    cg.fillRect(x(c.startT), 0, Math.max(1, x(c.endT) - x(c.startT)), H);
+    cg.fillRect(x(c.startT), 0, Math.max(1, x(c.endT) - x(c.startT)), VB);
     cg.strokeStyle = "#ff5050"; cg.lineWidth = 1.5;
     cg.beginPath();
-    cg.moveTo(x(c.boundary), 0); cg.lineTo(x(c.boundary), H);
+    cg.moveTo(x(c.boundary), 0); cg.lineTo(x(c.boundary), VB);
     cg.stroke();
     cg.fillStyle = "#ff9090";
     cg.font = "10px sans-serif";
@@ -348,10 +480,10 @@ function drawAll(){
   const pal = ["#7ee0ff", "#ffb56b", "#9aff8f", "#e07ee0", "#ffe07e"];
   refs.forEach((r, i) => {
     cg.fillStyle = pal[i % pal.length] + "55";
-    cg.fillRect(x(r.start), H - 18, Math.max(1, x(r.end) - x(r.start)), 12);
+    cg.fillRect(x(r.start), VB - 18, Math.max(1, x(r.end) - x(r.start)), 12);
     cg.fillStyle = pal[i % pal.length];
     cg.font = "10px sans-serif";
-    cg.fillText(r.label || i, x(r.start), H - 20);
+    cg.fillText(r.label || i, x(r.start), VB - 20);
   });
 
   // плейхед видео
@@ -382,6 +514,40 @@ function drawAll(){
       if (!started){ cg.moveTo(px, py); started = true; } else cg.lineTo(px, py);
     }
     cg.stroke();
+  }
+}
+
+// нижний трек «голос»: подсветка активных кадров, кривая RMS, пунктиры границ
+function drawVoiceBand(W, H, VB, x){
+  if (!$("showVoice").checked || !voiceFrames.length) return;
+  const bandTop = VB + 4;
+  const bandH = H - bandTop - 12;
+  cg.strokeStyle = "rgba(150,120,220,.35)";
+  cg.beginPath(); cg.moveTo(0, bandTop - 2); cg.lineTo(W, bandTop - 2); cg.stroke();
+  cg.fillStyle = "rgba(190,140,255,.28)";
+  for (const f of voiceFrames){
+    if (f.active) cg.fillRect(x(f.t), bandTop, Math.max(1, x(f.t + 0.2) - x(f.t)), bandH);
+  }
+  cg.strokeStyle = "rgba(205,165,255,.9)"; cg.lineWidth = 1;
+  cg.beginPath();
+  let started = false;
+  for (const f of voiceFrames){
+    const px = x(f.t), py = bandTop + bandH - f.score * bandH;
+    if (!started){ cg.moveTo(px, py); started = true; } else cg.lineTo(px, py);
+  }
+  cg.stroke();
+  if (voiceSegs.length){
+    cg.strokeStyle = "rgba(205,120,255,.85)"; cg.setLineDash([3, 4]);
+    for (const s of voiceSegs){
+      cg.beginPath(); cg.moveTo(x(s.start), 0); cg.lineTo(x(s.start), H); cg.stroke();
+    }
+    cg.setLineDash([]);
+  }
+  cg.fillStyle = "#c9aef0"; cg.font = "10px sans-serif";
+  cg.fillText("голос", 4, bandTop + 10);
+  if (voiceMeta){
+    cg.fillStyle = "#667";
+    cg.fillText(`${voiceMeta.count} инт. · ${voiceMeta.spokenPct.toFixed(0)}% речи`, 4, bandTop + bandH - 2);
   }
 }
 
@@ -431,6 +597,10 @@ function exportConfig(){
     duration: dur, frames: frames.length,
     refs, cands: cands.map(c => ({ ...c, peak: +c.peak.toFixed(3), conf: +c.conf.toFixed(3) })),
     segments,
+    voice: {
+      segments: voiceSegs,
+      meta: voiceMeta
+    },
     metrics: evaluate(+$("iou").value),
     signal: signal.map(s => ({ t: +s.t.toFixed(2), comb: s.comb == null ? null : +s.comb.toFixed(3),
                               Dm: s.Dm == null ? null : +s.Dm.toFixed(3), Dp: s.Dp == null ? null : +s.Dp.toFixed(3) }))
@@ -462,6 +632,13 @@ export function init(){
     try { v.currentTime = +tr.dataset.s; } catch(_){}
     v.play().catch(() => {});
   });
+  $("voice").addEventListener("click", e => {
+    const tr = e.target.closest("tr[data-s]");
+    if (!tr || running) return;
+    try { v.currentTime = +tr.dataset.s; } catch(_){}
+    v.play().catch(() => {});
+  });
+  $("showVoice").addEventListener("input", drawAll);
   for (const id of ["win", "step", "ctx"]){
     $(id).addEventListener("change", () => { if (signal.length) computeSignal(); });
   }
