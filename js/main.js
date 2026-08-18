@@ -103,3 +103,6 @@ $("tabSingle").onclick = () => setMode("single");
 $("tabCmp").onclick = () => setMode("cmp");
 
 diag("JS: загружен " + new Date().toLocaleTimeString());
+const diagEl = $("diagRow");
+if (diagEl) diagEl.textContent =
+  `изоляция: ${crossOriginIsolated ? "да" : "нет"} · wakeLock: ${"wakeLock" in navigator ? "да" : "нет"}`;

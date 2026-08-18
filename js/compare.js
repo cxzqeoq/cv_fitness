@@ -29,6 +29,25 @@ function cmpSmooth(prev, lm, a, raw){
 }
 import { VIS_LO } from "./config.js";
 
+// Wake Lock: экран не гаснет, пока идёт сравнение/тренировка/сегментация.
+// Блокировка сама снимается при сворачивании вкладки — перезахватываем по возврату.
+const wl = { s: null, want: false };
+async function wlOn(){
+  wl.want = true;
+  if (!("wakeLock" in navigator) || wl.s) return;
+  try {
+    wl.s = await navigator.wakeLock.request("screen");
+    wl.s.addEventListener("release", () => { wl.s = null; if (wl.want) wlOn(); });
+  } catch(_){}
+}
+function wlOff(){
+  wl.want = false;
+  if (wl.s){ try { wl.s.release(); } catch(_){} wl.s = null; }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && wl.want) wlOn();
+});
+
 // Мировые (метрические) точки фич с видимостью: у worldLandmarks visibility есть,
 // но на всякий случай страхуемся значением из 2D-точки того же индекса.
 function worldOf2(wm, lm){
@@ -722,6 +741,7 @@ function runSeg(rateHz){
   if (s.aAnalyze) s.aAnalyze.run = false;
   s.aAnalyze = null;
   const job = (s.segJob = { run:true, ac:new AbortController() });
+  wlOn();
   const t0 = performance.now();
   setSegBusy(true);
   $("segProg").hidden = false;
@@ -752,8 +772,10 @@ function runSeg(rateHz){
         say2("Сегментация отменена.");
       }
     } finally {
+      const current = job === s.segJob;
       if (!cmp.running && !cmp.preview){ try { vA.currentTime = 0; } catch(e){} }
-      if (job === s.segJob) s.segJob = null;
+      if (current) s.segJob = null;
+      if (current) wlOff();
       $("segProg").hidden = true;
       setSegBusy(false);
     }
@@ -845,7 +867,7 @@ function updateTrainBar(){
 }
 function boundaryCountdown(n, done, total){
   return new Promise(resolve => {
-    const ov = $("cvOverlay"), num = $("cvNum"), note = $("cvNote"), next = $("cvNext");
+    const ov = $("cvOverlay"), num = $("cvNum"), note = $("cvNote"), next = $("cvNext"), cancel = $("cvCancel");
     ov.hidden = false;
     num.textContent = n > 0 ? n + "" : "→";
     note.textContent = n > 0
@@ -853,10 +875,13 @@ function boundaryCountdown(n, done, total){
         : `Упражнение ${done} из ${total} завершено. Нажмите «Далее»`;
     next.hidden = false;
     next.disabled = false;
+    cancel.hidden = false;
+    cancel.disabled = false;
     beep(660, 0.1);
     let cur = n;
-    const finish = ok => { clearInterval(iv); ov.hidden = true; next.hidden = true; resolve(ok); };
+    const finish = ok => { clearInterval(iv); ov.hidden = true; next.hidden = true; cancel.hidden = true; resolve(ok); };
     next.onclick = () => finish(true);
+    cancel.onclick = () => cmpStop();
     if (n <= 0){ finish(true); return; }
     const iv = setInterval(() => {
       if (!cmp.running){ finish(false); return; }
@@ -1073,6 +1098,7 @@ async function startCompare(){
   buildCharts();
   cmp.running = true; $("cmpStop").disabled = false; $("cmpStop").hidden = false;
   cmp.boundaryPause = false;
+  if (s.camOn || cmp.train) wlOn();
   if (cmp.train && cmp.aSeg && cmp.aSeg.segments.length){
     cmp.train.cur = 0;
     try { vA.currentTime = cmp.aSeg.segments[cmp.train.from].start + 0.01; } catch(_){}
@@ -1147,6 +1173,7 @@ export function cmpStop(){
     ? `Готово. Сходство <b>${overall}%</b>, кадров <b>${cmp.samples.length}</b>, ${fps} кадр/с.${extra}`
     : "Сравнение остановлено.");
   if (s.camOn) stopCamera();
+  wlOff();
 }
 
 // ── просмотр эталона (просто видео, без скелета) ──

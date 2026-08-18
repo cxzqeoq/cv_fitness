@@ -51,22 +51,68 @@ export async function segmentVideo(video, lm, opts = {}){
   if (n > 0){
     await seekTo(video, 0);
     abort();
-    for (let i = 0; i < n; i++){
-      abort();
-      const t = Math.min(i * stepSec, dur);
-      await seekTo(video, t);
-      abort();
-      const ts = Math.max(lastTs + 1, Math.round((video.currentTime || t) * 1000));
-      lastTs = ts;
-      lm._lastTs = ts;
-      let res = null;
-      try { res = lm.detectForVideo(video, ts); } catch(_){}
-      const w = res?.worldLandmarks?.[0];
-      frames.push({ time: t, desc: w ? frameDescriptors(w) : null });
-      if (onProg && i % 10 === 0){
-        const per = (performance.now() - t0) / (i + 1);
-        onProg({ pct: Math.min(100, t / dur * 100), etaSec: Math.max(0, (n - i - 1) * per / 1000),
-                 done: i + 1, total: n });
+    let playing = true;
+    try {
+      video.playbackRate = 2;
+      await video.play();
+    } catch(_){ playing = false; }
+    if (playing){
+      // Сбор кадров воспроизведением: один проход без перемоток (на телефоне каждая
+      // перемотка — декод с keyframe, до 3 с; здесь кадры берутся по ходу проигрывания).
+      // playbackRate адаптивен: если детект медленный — видео идёт медленнее, кадров меньше.
+      let i = 0, lastDetMs = null;
+      let stallT = performance.now(), stallCt = video.currentTime;
+      while (i < n && video.readyState >= 2 && video.currentTime < dur + 0.05){
+        abort();
+        if (video.currentTime !== stallCt){
+          stallCt = video.currentTime; stallT = performance.now();
+        } else if (performance.now() - stallT > 1500){
+          break; // воспроизведение не сдвинулось — не виснем
+        }
+        const t = i * stepSec;
+        if (video.currentTime >= t - 0.01){
+          const ts = Math.max(lastTs + 1, Math.round((video.currentTime || t) * 1000));
+          lastTs = ts; lm._lastTs = ts;
+          const st = performance.now();
+          let res = null;
+          try { res = lm.detectForVideo(video, ts); } catch(_){}
+          lastDetMs = performance.now() - st;
+          const w = res?.worldLandmarks?.[0];
+          frames.push({ time: video.currentTime, desc: w ? frameDescriptors(w) : null });
+          i++;
+          if (onProg && i % 10 === 0){
+            const per = (performance.now() - t0) / i;
+            const detSec = (n - i) * per / 1000;
+            const playSec = (dur - video.currentTime) / Math.max(0.1, video.playbackRate || 1);
+            onProg({ pct: Math.min(100, video.currentTime / dur * 100),
+                     etaSec: Math.max(0, Math.max(detSec, playSec)), done: i, total: n });
+          }
+          if (lastDetMs){
+            const want = 0.9 * (stepSec * 1000) / Math.max(1, lastDetMs);
+            try { video.playbackRate = Math.min(2, Math.max(1, want)); } catch(_){}
+          }
+        } else {
+          await new Promise(res => setTimeout(res, 16));
+        }
+      }
+    } else {
+      // фолбэк: seek-and-detect, если автоплей заблокирован
+      for (let i = 0; i < n; i++){
+        abort();
+        const t = Math.min(i * stepSec, dur);
+        await seekTo(video, t);
+        abort();
+        const ts = Math.max(lastTs + 1, Math.round((video.currentTime || t) * 1000));
+        lastTs = ts; lm._lastTs = ts;
+        let res = null;
+        try { res = lm.detectForVideo(video, ts); } catch(_){}
+        const w = res?.worldLandmarks?.[0];
+        frames.push({ time: t, desc: w ? frameDescriptors(w) : null });
+        if (onProg && i % 10 === 0){
+          const per = (performance.now() - t0) / (i + 1);
+          onProg({ pct: Math.min(100, t / dur * 100), etaSec: Math.max(0, (n - i - 1) * per / 1000),
+                   done: i + 1, total: n });
+        }
       }
     }
     try { video.pause(); } catch(_){}

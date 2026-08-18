@@ -10,6 +10,7 @@
 <div class="wrap">
   <h1>CV Fitness</h1>
   <div class="sub">Видео никуда не отправляется.</div>
+  <div id="diagRow" class="mono"></div>
 
   <div class="tabs">
     <button id="tabSingle" class="act">Один</button>
@@ -276,7 +277,10 @@
     <div id="cvOverlay" hidden>
       <div id="cvNum"></div>
       <div id="cvNote"></div>
-      <button id="cvNext" class="ghost" hidden>Далее</button>
+      <div id="cvRow">
+        <button id="cvNext" class="ghost" hidden>Далее</button>
+        <button id="cvCancel" class="ghost" hidden>Отменить</button>
+      </div>
     </div>
 
     <div class="panel">
