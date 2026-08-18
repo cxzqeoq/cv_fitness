@@ -38,6 +38,23 @@ button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line
 button:disabled{opacity:.35;cursor:not-allowed}
 #prog,#progC{height:6px;background:#0b0e10;border:1px solid var(--line);border-radius:3px;margin-top:12px;overflow:hidden}
 #progFill,#progFillC{height:100%;width:0;background:linear-gradient(90deg,#c6ff2e,#fff07a);transition:width .2s}
+#segProgC{flex:1;height:6px;background:#0b0e10;border:1px solid var(--line);border-radius:3px;margin:auto 0;overflow:hidden}
+#segProgFill{height:100%;width:0;background:linear-gradient(90deg,#c6ff2e,#fff07a);transition:width .2s}
+#segList{display:flex;flex-direction:column;gap:4px;margin-top:8px;max-height:220px;overflow:auto}
+#trainBar{color:var(--hot);font-size:12px;margin-top:8px;padding:4px 0}
+#cvNext{margin-top:12px}
+.segrow{display:flex;gap:4px;align-items:center}
+.segrow .segitem{width:auto;flex:1}
+.segitem-play{flex:0 0 auto;padding:6px 10px;background:transparent;color:var(--dim);border:1px solid var(--line);border-radius:4px}
+.segitem-play:hover{color:var(--hot);border-color:var(--hot)}
+.segitem{display:flex;gap:10px;align-items:center;width:100%;justify-content:flex-start;
+  background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 10px;
+  font-size:12px;letter-spacing:0;text-transform:none;font-weight:500}
+.segitem:hover{border-color:var(--dim)}
+.segitem.active{border-color:var(--hot);color:var(--hot)}
+.segitem span{font-weight:700;color:var(--dim);min-width:16px}
+.segitem b{font-weight:600}
+.segitem i{color:var(--dim);font-style:normal;font-size:11px}
 .recbadge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.1em;color:#0e1113;
   background:var(--hot);border-radius:3px;padding:1px 7px;opacity:0;transition:opacity .15s}
 .recbadge.on{opacity:1;animation:blink 1s steps(2) infinite}

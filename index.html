@@ -125,6 +125,29 @@
       <div id="aProfNote" class="foot" style="margin:6px 0 0"></div>
     </div>
 
+    <div class="panel" id="segPanel" hidden>
+      <div class="crow" style="margin-bottom:6px">
+        <span class="mono" style="min-width:0">Эталон разбить на упражнения?</span>
+        <span style="flex:1"></span>
+        <button id="segRun" class="ghost">Разбить (5 Гц)</button>
+        <button id="segFast" class="ghost">Быстро (2 Гц)</button>
+        <button id="segClear" class="ghost" hidden>Убрать разбиение</button>
+      </div>
+      <div class="crow" id="segProg" hidden>
+        <div id="segProgC"><div id="segProgFill"></div></div>
+        <span id="segProgTxt" class="mono" style="min-width:0"></span>
+        <button id="segCancel" class="ghost">Отмена</button>
+      </div>
+      <div class="crow" id="segTrainRow" style="margin:6px 0" hidden>
+        <span class="mono" style="min-width:0">Тренировка:</span>
+        <span style="flex:1"></span>
+        <button id="segTrainAll" class="ghost">Все подряд</button>
+        <button id="segTrainOff" class="ghost" hidden>Обычный режим</button>
+      </div>
+      <div id="segTip" class="foot" style="margin:6px 0 0"></div>
+      <div id="segList"></div>
+    </div>
+
     <div class="panel">
       <div class="crow">
         <label class="f">Упражнение
@@ -226,6 +249,7 @@
 
       <div id="progC"><div id="progFillC"></div></div>
       <div class="stat" id="statC"></div>
+      <div id="trainBar" class="mono" hidden></div>
       <div id="statusC">Загрузите видео в поля A и B.</div>
     </div>
 
@@ -252,6 +276,7 @@
     <div id="cvOverlay" hidden>
       <div id="cvNum"></div>
       <div id="cvNote"></div>
+      <button id="cvNext" class="ghost" hidden>Далее</button>
     </div>
 
     <div class="panel">

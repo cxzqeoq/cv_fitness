@@ -10,6 +10,7 @@ import { renderScore, renderReps, renderHold, buildCharts, drawCharts, detectExe
 import { drawSkelC, drawCmpBg } from "./render.js";
 import { dtwAlign, liveMatch, bestInWindow } from "./dtw.js";
 import { med, medianTail, sigmaRobust, simReported } from "./qc.js";
+import { segmentVideo } from "./seg.js";
 
 const vA = $("vA"), vB = $("vB"), cvA = $("cvA"), cvB = $("cvB");
 const ctxA = cvA.getContext("2d", { alpha:true }), ctxB = cvB.getContext("2d", { alpha:true });
@@ -125,6 +126,7 @@ function cmpTick(){
     if (va) drawSkelC(ctxA, cvA.width, cvA.height, colA, cmp.smoothA, $("showA").checked, va);
     if (vb) drawSkelC(ctxB, cvB.width, cvB.height, colB, cmp.smoothB, $("showA").checked, vb);
 
+    if (cmp.train && !cmp.boundaryPause) triggerBoundary();
     if (cmp.armed && newA && newB) cmpAddSample(va, vb);
     if (++cmp.everyN % 6 === 0){ cmpUpdateUI(); drawCharts(); }
   } catch(err){
@@ -137,6 +139,7 @@ function cmpTick(){
 
 // Накопление одного сэмпла сравнения: окно A, DTW/лаг, форма-гейт и веса.
 function cmpAddSample(va, vb){
+  if (cmp.boundaryPause) return;
   if (!va && !vb) return;
   if (!s.camOn && performance.now() < cmp.warmUntil) return;
   va = va || {}; vb = vb || {};
@@ -546,6 +549,8 @@ export function loadA(f){
   loadCmp(vA, cvA, ctxA, $("infoA"), f, "A");
   cmp.aProf = null; cmp.maskApplied = false;
   $("aProfPanel").hidden = true;
+  resetSegA();
+  $("segPanel").hidden = false;
   vA.onloadeddata = () => {
     try { ctxA.drawImage(vA, 0, 0, cvA.width, cvA.height); } catch(e){}
     scheduleAnalyzeA();
@@ -555,9 +560,10 @@ export function loadA(f){
 export function loadB(f){ if (!f) return; s.hasB = true; loadCmp(vB, cvB, ctxB, $("infoB"), f, "B"); syncCmpBtns(); }
 function syncCmpBtns(){
   const bReady = s.hasB || s.camOn;
-  $("cmpGo").disabled = !(s.hasA && bReady);
-  $("cmpMark").disabled = !(s.hasA && bReady);
-  $("cmpPreview").disabled = !s.hasA;
+  const busy = !!s.segJob;
+  $("cmpGo").disabled = !(s.hasA && bReady) || busy;
+  $("cmpMark").disabled = !(s.hasA && bReady) || busy;
+  $("cmpPreview").disabled = !s.hasA || busy;
 }
 
 // ── анализ эталона: карточка упражнения + авто-маска фич ──
@@ -572,6 +578,7 @@ function ensureLmA(){
 function scheduleAnalyzeA(){
   clearTimeout(s.aAnalyzeT);
   if (cmp._noAnalyze) return;
+  if (s.segJob) return;
   cmp.aProf = null; cmp.maskApplied = false;
   $("aProfPanel").hidden = true;
   s.aAnalyzeT = setTimeout(() => analyzeA(), 800);
@@ -579,6 +586,7 @@ function scheduleAnalyzeA(){
 async function analyzeA(){
   if (!s.hasA || !(vA.duration > 0)) return;
   if (cmp.running) return;
+  if (s.segJob) return;
   const job = (s.aAnalyze = { run:true });
   const dur = vA.duration;
   const N = Math.max(12, Math.min(40, Math.round(dur)));
@@ -588,7 +596,7 @@ async function analyzeA(){
     if (cmp.running) return;
     vA.pause();
     const series = {}; for (const f of FEATURES) series[f.key] = [];
-    let prevTs = 0, det = 0;
+    let prevTs = (lm._lastTs ?? 0), det = 0;
     for (let i = 0; i < N; i++){
       if (cmp.running || !job.run || job !== s.aAnalyze) return;
       vA.currentTime = dur * i / (N - 1);
@@ -599,6 +607,7 @@ async function analyzeA(){
       });
       if (cmp.running || !job.run || job !== s.aAnalyze) return;
       const ts = Math.max(prevTs + 1, Math.round(vA.currentTime * 1000)); prevTs = ts;
+      lm._lastTs = ts;
       let fa = null;
       try { fa = await lm.detectForVideo(vA, ts); } catch(e){ continue; }
       if (!fa?.landmarks?.length) continue;
@@ -700,6 +709,192 @@ function renderAProf(prof){
       : "";
 }
 
+// ── авто-сегментация эталона: предразбиение видео A на упражнения ──
+function setSegBusy(busy){
+  $("segRun").disabled = busy;
+  $("segFast").disabled = busy;
+  syncCmpBtns();
+}
+function runSeg(rateHz){
+  if (!s.hasA) return;
+  if (cmp.running) return;
+  clearTimeout(s.aAnalyzeT);
+  if (s.aAnalyze) s.aAnalyze.run = false;
+  s.aAnalyze = null;
+  const job = (s.segJob = { run:true, ac:new AbortController() });
+  const t0 = performance.now();
+  setSegBusy(true);
+  $("segProg").hidden = false;
+  $("segProgFill").style.width = "0%";
+  $("segProgTxt").textContent = `сбор 0% · осталось ~…`;
+  say2(`сегментация эталона (${rateHz} Гц)…`);
+  (async () => {
+    try {
+      const lm = await ensureLmA();
+      if (!job.run || job !== s.segJob) return;
+      const res = await segmentVideo(vA, lm, {
+        rateHz,
+        signal: job.ac.signal,
+        onProg: p => {
+          if (!job.run || job !== s.segJob) return;
+          $("segProgFill").style.width = p.pct.toFixed(1) + "%";
+          $("segProgTxt").textContent = `сбор ${p.pct.toFixed(0)}% · кадров ${p.done}/${p.total} · осталось ~${Math.max(0, p.etaSec).toFixed(0)} с`;
+        }
+      });
+      if (!job.run || job !== s.segJob) return;
+      cmp.aSeg = { ...res, fast: rateHz === 2 };
+      renderSegList();
+      say2(`Эталон разбит: ${res.segments.length} сегмент(ов), распознано ${res.valid}/${res.n} кадров.`);
+    } catch(err){
+      if (job.run && job === s.segJob){
+        say2("Сегментация: " + ((err && err.message) || err), true);
+      } else {
+        say2("Сегментация отменена.");
+      }
+    } finally {
+      if (!cmp.running && !cmp.preview){ try { vA.currentTime = 0; } catch(e){} }
+      if (job === s.segJob) s.segJob = null;
+      $("segProg").hidden = true;
+      setSegBusy(false);
+    }
+  })();
+}
+function renderSegList(){
+  const seg = cmp.aSeg;
+  const list = $("segList");
+  if (!seg || !seg.segments.length){ list.innerHTML = ""; return; }
+  const segs = seg.segments;
+  const fmt = t => {
+    const m = Math.floor(t / 60), sec = Math.floor(t % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+  let html = "";
+  segs.forEach((sg, i) => {
+    html += `<div class="segrow" data-i="${i}">
+      <button class="segitem" data-i="${i}"><span>${i + 1}</span><b>${fmt(sg.start)} → ${fmt(sg.end)}</b><i>${fmt(sg.end - sg.start)}</i></button>
+      <button class="segitem-play" data-i="${i}" title="тренироваться с этого упражнения">▶</button>
+    </div>`;
+  });
+  list.innerHTML = html;
+  list.querySelectorAll(".segitem").forEach(btn => {
+    btn.onclick = () => { try { vA.currentTime = segs[+btn.dataset.i].start + 0.01; } catch(e){} };
+  });
+  list.querySelectorAll(".segitem-play").forEach(btn => {
+    btn.onclick = () => startSegTrain(+btn.dataset.i);
+  });
+  const tip = [];
+  if (seg.fast) tip.push("быстро (2 Гц) — черновик, возможны ошибки границ");
+  if (seg.degraded) tip.push("мало распознанных кадров — границы неточны");
+  $("segTip").textContent = tip.join("; ");
+  const markActive = () => {
+    const t = vA.currentTime;
+    let idx = -1;
+    for (let i = 0; i < segs.length; i++){
+      if (t >= segs[i].start - 0.05 && t <= segs[i].end + 0.05){ idx = i; break; }
+    }
+    list.querySelectorAll(".segitem").forEach((b, i) => b.classList.toggle("active", i === idx));
+  };
+  vA.removeEventListener("timeupdate", markActive);
+  vA.addEventListener("timeupdate", markActive);
+  markActive();
+  $("segRun").hidden = true;
+  $("segFast").hidden = true;
+  $("segClear").hidden = false;
+  $("segTrainRow").hidden = false;
+  $("segTrainAll").disabled = false;
+  $("cntWrap").hidden = !s.camOn && !seg;
+}
+function resetSegA(){
+  if (s.segJob){ s.segJob.run = false; s.segJob.ac.abort(); s.segJob = null; }
+  stopSegTrain();
+  cmp.aSeg = null;
+  $("segList").innerHTML = "";
+  $("segTip").textContent = "";
+  $("segProg").hidden = true;
+  $("segRun").hidden = false;
+  $("segFast").hidden = false;
+  $("segClear").hidden = true;
+  $("segTrainRow").hidden = true;
+  $("cntWrap").hidden = !s.camOn;
+}
+
+// ── гуидированная тренировка: сегменты как логические диапазоны эталона ──
+function startSegTrain(from){
+  const seg = cmp.aSeg;
+  if (!seg || !seg.segments.length) return;
+  const segs = seg.segments;
+  cmp.train = { segs, from: Math.max(0, Math.min(from, segs.length - 1)), cur: 0 };
+  $("segTrainOff").hidden = false;
+  say2(`Гуидированная тренировка: старт с упражнения ${cmp.train.from + 1} из ${segs.length}. Нажмите «Сравнить».`);
+}
+function stopSegTrain(){
+  cmp.train = null;
+  cmp.boundaryPause = false;
+  $("segTrainOff").hidden = true;
+  $("trainBar").hidden = true;
+  const ov = $("cvOverlay");
+  if (ov) ov.hidden = true;
+}
+function updateTrainBar(){
+  const bar = $("trainBar");
+  if (cmp.train){
+    const total = cmp.train.segs.length;
+    bar.hidden = false;
+    bar.textContent = `Упражнение ${cmp.train.cur + 1} из ${total}${cmp.train.from ? ` · начато с упражнения ${cmp.train.from + 1}` : ""}${cmp.aSeg?.degraded ? " · ⚠ черновик" : ""}`;
+  } else bar.hidden = true;
+}
+function boundaryCountdown(n, done, total){
+  return new Promise(resolve => {
+    const ov = $("cvOverlay"), num = $("cvNum"), note = $("cvNote"), next = $("cvNext");
+    ov.hidden = false;
+    num.textContent = n > 0 ? n + "" : "→";
+    note.textContent = n > 0
+        ? `Упражнение ${done} из ${total} завершено. Следующее через ${n} с`
+        : `Упражнение ${done} из ${total} завершено. Нажмите «Далее»`;
+    next.hidden = false;
+    next.disabled = false;
+    beep(660, 0.1);
+    let cur = n;
+    const finish = ok => { clearInterval(iv); ov.hidden = true; next.hidden = true; resolve(ok); };
+    next.onclick = () => finish(true);
+    if (n <= 0){ finish(true); return; }
+    const iv = setInterval(() => {
+      if (!cmp.running){ finish(false); return; }
+      cur--;
+      num.textContent = Math.max(0, cur) + "";
+      note.textContent = cur > 0
+          ? `Упражнение ${done} из ${total} завершено. Следующее через ${cur} с`
+          : "старт";
+      beep(cur > 0 ? 660 : 990, cur > 0 ? 0.1 : 0.35);
+      if (cur <= 0){ finish(true); return; }
+    }, 1000);
+  });
+}
+function triggerBoundary(){
+  const tr = cmp.train;
+  if (!tr || cmp.boundaryPause) return;
+  const segs = tr.segs;
+  const curSeg = segs[tr.cur];
+  const nextSeg = segs[tr.cur + 1];
+  if (!curSeg || !nextSeg) return; // последний сегмент — до конца видео
+  if (vA.currentTime < curSeg.end - 0.1) return;
+  cmp.boundaryPause = true;
+  vA.pause();
+  const prep = Number($("cnt").value) || 0;
+  (async () => {
+    if (prep > 0){
+      const ok = await boundaryCountdown(prep, tr.cur + 1, segs.length);
+      if (!cmp.running || !ok) return;
+    }
+    tr.cur++;
+    cmp.smoothA = []; cmp.smoothA3D = [];
+    try { vA.currentTime = nextSeg.start + 0.01; } catch(_){}
+    updateTrainBar();
+    cmp.boundaryPause = false;
+    try { await playVideo(vA, !s.sound.muted); } catch(_){}
+  })();
+}
+
 // ── подсказка кадра для живой камеры ──
 function camHintB(){
   const lm = cmp.smoothB[cmp.smoothB.length - 1];
@@ -725,7 +920,7 @@ function setBSource(cam){
   s.useCamB = cam;
   $("cmpBFile").disabled = cam;
   $("camBtn").disabled = !cam;
-  $("cntWrap").hidden = !cam;
+  $("cntWrap").hidden = !cam && !cmp.aSeg;
   if (cam && !s.camOn){ $("infoB").textContent = "нажмите «Включить камеру»"; }
   if (!cam && s.camOn) stopCamera();
   s.lagTouched = false;   // источник сменился — вернуть дефолтное окно для режима (2с камера / 0.5с файл)
@@ -815,6 +1010,7 @@ async function startCompare(){
   clearTimeout(s.aAnalyzeT);
   if (s.aAnalyze) s.aAnalyze.run = false;
   s.aAnalyze = null;
+  if (s.segJob){ s.segJob.run = false; s.segJob.ac.abort(); s.segJob = null; }
   cmp._noAnalyze = true;
   if (cmp.preview) stopPreview();
   if (s.useCamB && !s.camOn){
@@ -876,7 +1072,14 @@ async function startCompare(){
   $("csvBtn").disabled = true;
   buildCharts();
   cmp.running = true; $("cmpStop").disabled = false; $("cmpStop").hidden = false;
-  vA.currentTime = cmp.markA;
+  cmp.boundaryPause = false;
+  if (cmp.train && cmp.aSeg && cmp.aSeg.segments.length){
+    cmp.train.cur = 0;
+    try { vA.currentTime = cmp.aSeg.segments[cmp.train.from].start + 0.01; } catch(_){}
+    updateTrainBar();
+  } else {
+    vA.currentTime = cmp.markA;
+  }
   if (!s.camOn) vB.currentTime = cmp.markB;
   let prepSec = s.camOn ? (Number($("cnt").value) || 0) : 0;
   vA.pause();
@@ -906,6 +1109,8 @@ export function cmpStop(){
   if (cmp.preview){ stopPreview(); return; }
   const wasRun = cmp.running;
   cmp.running = false;
+  cmp.boundaryPause = false;
+  $("trainBar").hidden = true;
   cmp.audioPending = false;
   cmp._noAnalyze = false;
   const ov = $("cvOverlay");
@@ -1178,6 +1383,12 @@ export function init(){
     previewTick();
   };
   $("aProfBtn").onclick = () => analyzeA();
+  $("segRun").onclick = () => runSeg(5);
+  $("segFast").onclick = () => runSeg(2);
+  $("segCancel").onclick = () => { if (s.segJob){ s.segJob.run = false; s.segJob.ac.abort(); } };
+  $("segClear").onclick = () => resetSegA();
+  $("segTrainAll").onclick = () => startSegTrain(0);
+  $("segTrainOff").onclick = () => { stopSegTrain(); say2("Обычный режим сравнения."); };
   $("csvBtn").onclick = downloadCSV;
   $("exSel").onchange = applyPreset;
   $("lagWin").oninput = e => {

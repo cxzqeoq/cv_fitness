@@ -45,7 +45,7 @@ export async function segmentVideo(video, lm, opts = {}){
   const stepSec = 1 / rateHz;
   const n = dur > 0 ? Math.floor(dur / stepSec) + 1 : 0;
   const frames = [];
-  let lastTs = 0;
+  let lastTs = (lm._lastTs ?? 0);
   const t0 = performance.now();
 
   if (n > 0){
@@ -58,6 +58,7 @@ export async function segmentVideo(video, lm, opts = {}){
       abort();
       const ts = Math.max(lastTs + 1, Math.round((video.currentTime || t) * 1000));
       lastTs = ts;
+      lm._lastTs = ts;
       let res = null;
       try { res = lm.detectForVideo(video, ts); } catch(_){}
       const w = res?.worldLandmarks?.[0];

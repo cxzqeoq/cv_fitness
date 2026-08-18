@@ -14,6 +14,7 @@ export const s = {
   camStream: null,       // MediaStream камеры
   aAnalyze: null,        // запущенный фоновый анализ эталона (для отмены)
   aAnalyzeT: null,       // таймер отложенного анализа
+  segJob: null,          // запущенный проход сегментации эталона: { run, ac:AbortController }
   chartCV: {},           // канвасы графиков по фичам
   lagTouched: false,     // пользователь вручную двигал «задержку»
   actx: null,            // AudioContext (лениво создаётся в beep)
@@ -31,5 +32,8 @@ export const cmp = {
   detB:{}, repScores:[], exType:null, primary:null, amp:25,
   dtw:null, tag:"",
   aProf:null, maskApplied:false, gate:{}, gateSum:{}, gateN:{},
+  aSeg:null,                // результат авто-сегментации эталона: { segments, signal, fast, degraded, ... }
+  train:null,               // гуидированная тренировка: { segs, from, cur } — сегменты-логические диапазоны
+  boundaryPause:false,      // пауза на границе сегмента (в неё сэмплы не копим)
   sigmaNoise:{}, sigmaFrozen:{}, resid:{}
 };
