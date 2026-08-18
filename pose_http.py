@@ -31,6 +31,10 @@ ALLOWED = re.compile(
 class NoCacheHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        # Cross-origin isolation: включает многопоточность MediaPipe WASM.
+        # Без этого детекция идёт в один поток CPU (~70 мс/кадр вместо ~15 мс).
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         super().end_headers()
 
     def _allowed(self):
