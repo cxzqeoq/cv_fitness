@@ -27,15 +27,14 @@
   .card h3 { margin: 0 0 8px; font-size: 13px; color: #aaf; }
   #metrics { min-height: 20px; }
   #ctx { font: 12px/1.5 monospace; color: #cde; }
-  #segs table, #voice table { width: 100%; border-collapse: collapse; font: 12px/1.4 monospace; }
-  #segs th, #segs td, #voice th, #voice td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #242c40; }
-  #segs th, #voice th { color: #88a; font-weight: 600; }
-  #segs tr[data-s], #voice tr[data-s] { cursor: pointer; }
-  #segs tr[data-s]:hover, #voice tr[data-s]:hover { background: #22304d; }
+  #segs table { width: 100%; border-collapse: collapse; font: 12px/1.4 monospace; }
+  #segs th, #segs td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #242c40; }
+  #segs th { color: #88a; font-weight: 600; }
+  #segs tr[data-s] { cursor: pointer; }
+  #segs tr[data-s]:hover { background: #22304d; }
   #segs tr.cur { background: #1e3350; outline: 1px solid #4a9cff; }
   #status { color: #9fd; font-size: 13px; }
   #status.err { color: #f88; }
-  #vstatus { color: #b9a; font-size: 13px; margin-top: 4px; }
   .hint { color: #667; font-size: 12px; margin-top: 10px; }
 </style>
 </head>
@@ -61,7 +60,6 @@
 
 <div class="row">
   <label><input type="checkbox" id="auto" checked> Автопорог</label>
-  <label><input type="checkbox" id="showVoice" checked> Голос</label>
   <label>High <small>пик</small> <input type="number" id="high" value="0.6" min="0" step="0.05"></label>
   <label>Low <small>гистерезис</small> <input type="number" id="low" value="0.3" min="0" step="0.05"></label>
   <label>Граница <small>% нарастания</small> <input type="number" id="frac" value="0.7" min="0.1" max="0.95" step="0.05"></label>
@@ -70,23 +68,17 @@
 </div>
 
 <div id="status">Выбери видео — сбор стартует автоматически.</div>
-<div id="vstatus">аудио: —</div>
 
 <video id="segVideo" controls playsinline></video>
 
 <canvas id="timeline" width="1100" height="300"></canvas>
-<div class="hint">Белая линия — плейхед видео. Клик по таймлайну — перемотка + признаки ближайшего кадра. Красные полосы — моушн-границы; фиолетовые пунктиры — речевые интервалы (трек «голос» внизу). Цветные полоски — референс (необязательно). Серая полоса внизу — участки без кадров.</div>
+<div class="hint">Белая линия — плейхед видео. Клик по таймлайну — перемотка + признаки ближайшего кадра. Красные полосы — моушн-границы. Цветные полоски — референс (необязательно). Серая полоса внизу — участки без кадров.</div>
 
 <div class="cards">
   <div class="card">
     <h3>Сегменты (авто)</h3>
     <div id="segs"></div>
     <p style="font-size:12px;color:#667;margin:6px 0 0">Клик по строке — перемотка к началу сегмента + play. «Автопорог» сам ставит high/low из перцентилей сигнала; сними, чтобы докрутить руками.</p>
-  </div>
-  <div class="card">
-    <h3>Сегменты по голосу</h3>
-    <div id="voice"></div>
-    <p style="font-size:12px;color:#667;margin:6px 0 0">Речь тренера (объяснения) — фиолетовые интервалы на нижнем треке. Клик по строке — перемотка к началу интервала.</p>
   </div>
   <div class="card">
     <details>

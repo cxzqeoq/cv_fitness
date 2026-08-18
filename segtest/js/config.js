@@ -73,14 +73,6 @@ export const CEIL_ERR_K = Math.SQRT2;
 // Нижний кламп потолка — нормировка не взрывается при экстремальном шуме.
 export const CEIL_FLOOR = 0.15;
 
-// Тиры: как интерпретировать сходство кадра.
-export const TIERS = [
-  { min:0.85, name:"ОТЛИЧНО", col:"#c6ff2e" },
-  { min:0.70, name:"ХОРОШО",  col:"#7ae0a0" },
-  { min:0.55, name:"ОК",       col:"#ffe27a" },
-  { min:0.00, name:"МИМО",     col:"#ff7a45" }
-];
-
 // Фичи сравнения: углы {a,b,c} через ang3()/ang3w() (метры, world-фрейм),
 // tilt — наклон корпуса, spread — развод рук, twist — кручение (только world).
 export const FEATURES = [
@@ -120,11 +112,3 @@ export const CYCLES = {
   poses: ["1","2","3","4"]
 };
 export const PART_KEYS = { h:"pHead", t:"pTorso", a:"pArms", l:"pLegs" };
-
-// Сообщения об ошибках видео по кодам MediaError.
-export const MEDIA_ERR = {
-  1: "загрузка прервана",
-  2: "ошибка чтения файла",
-  3: "DECODE — контейнер открылся, но поток не декодируется (10-битный профиль, HDR, битый файл)",
-  4: "SRC_NOT_SUPPORTED — браузер не берётся за этот кодек/контейнер"
-};
