@@ -53,6 +53,8 @@
   <label>Окно <small>с</small> <input type="number" id="win" value="5" min="2" step="1"></label>
   <label>Шаг <small>с</small> <input type="number" id="step" value="2" min="1" step="1"></label>
   <label>Контекст <small>с</small> <input type="number" id="ctx" value="5" min="2" step="1"></label>
+  <label>Норм: <select id="norm"><option value="global">global</option><option value="cap" selected>local+cap</option><option value="local">local</option></select></label>
+  <label><input type="checkbox" id="merge" checked> Слить похожие</label>
   <button id="btnRun">Пересчитать заново</button>
   <button id="btnStop" disabled>Стоп</button>
   <span class="bar"><span id="progFill"></span></span> <span id="prog"></span>

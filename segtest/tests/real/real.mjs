@@ -6,13 +6,14 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { frameDescriptors, buildWindows, madNormalize, contextDistance,
-         autothreshold, detectCandidates, segmentsFromCandidates } from "../../js/signature.js";
+         autothreshold, detectCandidatesUnion, refineCandidates, segmentsFromCandidates } from "../../js/signature.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 const CASES = [
   { name: "clip1", minFrames: 400, maxFirstT: 0.6, minCands: 2, boundary: 76.5, tol: 2.0 },
   { name: "0808", minFrames: 150, maxFirstT: 0.6, minCands: 0, boundary: null },
+  { name: "recordMISHA", minFrames: 8000, maxFirstT: 0.6, minCands: 15, boundary: 2306.5, tol: 3.0 },
 ];
 
 let failed = 0;
@@ -24,10 +25,11 @@ for (const c of CASES){
   const norms = madNormalize(wins);
   const signal = wins.map(w => {
     const d = contextDistance(wins, w.tMid, norms, 5) || {};
-    return { t: w.tMid, comb: d.combined ?? null };
+    const Dm = d.D_motion ?? null, Dp = d.D_pose ?? null;
+    return { t: w.tMid, comb: d.combined ?? null, Dm, Dp, chg: (Dm != null || Dp != null) ? Math.max(Dm ?? 0, Dp ?? 0) : null };
   });
-  const at = autothreshold(signal);
-  const cands = at ? detectCandidates(signal, at.high, at.low, 0.7) : [];
+  const raw = detectCandidatesUnion(signal, { frac: 0.7, dupSec: 3, combPct: [0.95, 0.7], chgPct: [0.9, 0.7] });
+  const cands = refineCandidates(raw, signal, { minProm: 0.3, minDist: 12, minConf: 0.05 });
   const valid = frames.filter(f => f.desc).length;
 
   const checks = [

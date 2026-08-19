@@ -41,32 +41,31 @@ def main():
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     total = cap.get(cv2.CAP_PROP_FRAME_COUNT)
     dur = total / fps if total else 0
-    step = max(1, int(round(fps / args.rate)))
 
     frames = []
-    i = 0
-    next_i = 0
-    while True:
+    dt = 1.0 / args.rate
+    t = 0.0
+    while t <= dur + 1e-9:
+        target_frame = int(round(t * fps))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
         ok, frame = cap.read()
         if not ok:
             break
-        if i >= next_i:
-            next_i = i + step
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            try:
-                res = lm.detect(Image(ImageFormat.SRGB, rgb))
-                wl = res.pose_world_landmarks
-                wm = ([{"x": l.x, "y": l.y, "z": l.z,
-                        "v": float(l.visibility) if l.visibility is not None else 1.0}
-                       for l in wl[0]] if wl else None)
-            except Exception:
-                wm = None
-            frames.append({"t": i / fps, "wm": wm})
-            if len(frames) % 200 == 0:
-                print("  %d кадров, t=%d/%d с" % (len(frames), i / fps, dur), flush=True)
-            if args.limit and len(frames) >= args.limit:
-                break
-        i += 1
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        try:
+            res = lm.detect(Image(ImageFormat.SRGB, rgb))
+            wl = res.pose_world_landmarks
+            wm = ([{"x": l.x, "y": l.y, "z": l.z,
+                    "v": float(l.visibility) if l.visibility is not None else 1.0}
+                   for l in wl[0]] if wl else None)
+        except Exception:
+            wm = None
+        frames.append({"t": t, "wm": wm})
+        if len(frames) % 200 == 0:
+            print("  %d кадров, t=%d/%d с" % (len(frames), t, dur), flush=True)
+        if args.limit and len(frames) >= args.limit:
+            break
+        t += dt
     cap.release()
 
     out = {"duration": dur, "fps": fps, "rate_hz": args.rate, "frames": frames}
