@@ -10,7 +10,7 @@
 
 <div class="flex items-start justify-between gap-4 mb-5">
   <div class="flex items-center gap-3 min-w-0">
-    <a href="/" class="text-slate-400 hover:text-slate-700 text-lg">←</a>
+    <a href="/" class="text-slate-400 hover:text-slate-700"><i data-lucide="arrow-left" class="w-5 h-5"></i></a>
     <div class="w-14 h-9 rounded-md bg-slate-900 overflow-hidden shrink-0">
       {% if video.segments %}<img src="/api/videos/{{ video.id }}/segments/1/thumb" class="w-full h-full object-cover">{% endif %}
     </div>
@@ -28,12 +28,12 @@
   <div class="flex items-center gap-2 shrink-0">
     <form action="/{{ video.id }}/describe" method="post">
       <button class="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-md px-3.5 py-1.5">
-        ✨ Описать сегменты
+        <i data-lucide="sparkles" class="w-4 h-4"></i> Описать сегменты
       </button>
     </form>
     <a href="/watch/{{ video.id }}" target="_blank"
-       class="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
-      ▶ Смотреть
+       class="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
+      <i data-lucide="play" class="w-4 h-4"></i> Смотреть
     </a>
   </div>
   {% endif %}
@@ -42,7 +42,7 @@
 {% if video.status.value == "processing" %}
 <div class="mb-6 max-w-md">
   <div class="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-    <div class="h-full bg-rose-500" style="width: {{ ((video.frames_done or 0) / video.frames_total * 100) if video.frames_total else 0 }}%"></div>
+    <div class="h-full bg-violet-500" style="width: {{ ((video.frames_done or 0) / video.frames_total * 100) if video.frames_total else 0 }}%"></div>
   </div>
   <p class="text-xs text-slate-400 mt-1.5">{{ video.frames_done or 0 }} / {{ video.frames_total or "?" }} кадров</p>
 </div>
@@ -58,7 +58,7 @@
     {% if video.duration_sec and video.segments %}
     <div class="relative h-16 rounded-md bg-gradient-to-b from-slate-50 to-slate-100 min-w-[480px]">
       {% for s in video.segments %}
-      <div class="absolute top-0 h-full bg-rose-400/25 border-x border-rose-400/60"
+      <div class="absolute top-0 h-full bg-violet-400/25 border-x border-violet-400/60"
            style="left: {{ (s.start_sec / video.duration_sec * 100) }}%; width: {{ ((s.end_sec - s.start_sec) / video.duration_sec * 100) }}%;"
            title="{{ s.label }}"></div>
       {% endfor %}
@@ -89,11 +89,11 @@
     </div>
     <div class="p-3 space-y-2 flex-1 flex flex-col">
       <input name="label" value="{{ s.label or '' }}" placeholder="Название упражнения"
-             class="w-full text-sm font-medium bg-transparent border-0 border-b border-transparent hover:border-slate-200 focus:border-rose-300 focus:outline-none px-0 py-1">
+             class="w-full text-sm font-medium bg-transparent border-0 border-b border-transparent hover:border-slate-200 focus:border-violet-300 focus:outline-none px-0 py-1">
       <textarea name="description" placeholder="Описание, что происходит" rows="2"
-                class="w-full text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-rose-200">{{ s.description or '' }}</textarea>
+                class="w-full text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ s.description or '' }}</textarea>
       <textarea name="subtitle" placeholder="Субтитры" rows="2"
-                class="w-full text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-rose-200">{{ s.subtitle or '' }}</textarea>
+                class="w-full text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ s.subtitle or '' }}</textarea>
       <button class="mt-auto self-start bg-slate-900 hover:bg-slate-800 text-white rounded-md px-3 py-1 text-xs font-medium">Сохранить</button>
     </div>
   </form>

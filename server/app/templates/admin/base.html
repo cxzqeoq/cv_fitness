@@ -5,40 +5,51 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}CV Fitness{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>body{font-family:"Inter",system-ui,sans-serif}</style>
 </head>
 <body class="bg-white text-slate-900 min-h-screen flex">
 
-<aside class="w-56 shrink-0 bg-[#14171f] text-slate-300 flex flex-col py-4">
+<!-- Dark-surface palette + accent match omra.blob's "Linear Sublime" dark theme
+     (src/omra_blob/admin/static/admin.src.css): surface #101113, line #1f2023,
+     ink #f7f8f8, muted text #8a8f98, accent violet #8b5cf6 — their dark theme
+     uses violet, not red; red/rose only appears in omra.blob's LIGHT theme.
+     Icons are Lucide (data-lucide + lucide.createIcons() below), same as
+     the rest of the fleet's admin stack — replaces the emoji/unicode glyphs
+     this had before (▤ 👥 ⚙), which rendered as broken tofu boxes. -->
+<aside class="w-56 shrink-0 bg-[#101113] text-[#8a8f98] flex flex-col py-4 border-r border-[#1f2023]">
   <div class="px-4 mb-6 flex items-center gap-2">
-    <div class="w-6 h-6 rounded bg-rose-500"></div>
-    <span class="font-semibold text-[15px] text-white">cv.fitness</span>
+    <div class="w-6 h-6 rounded bg-violet-500"></div>
+    <span class="font-semibold text-[15px] text-[#f7f8f8]">cv.fitness</span>
   </div>
 
   <nav class="px-2 space-y-0.5 text-sm">
-    <a href="/" class="flex items-center gap-2 px-2.5 py-1.5 rounded-md {{ 'bg-rose-500/15 text-rose-400 font-medium' if active == 'videos' else 'text-slate-400 hover:bg-white/5 hover:text-slate-200' }}">
-      <span class="w-4 text-center">▤</span> Видео
+    <a href="/" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'videos' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
+      <i data-lucide="layout-grid" class="w-4 h-4 shrink-0"></i>
+      Видео
     </a>
-    <a href="#" class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-slate-600 cursor-default">
-      <span class="w-4 text-center">👥</span> Команда
+    <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[#5a5e66] cursor-default">
+      <i data-lucide="users" class="w-4 h-4 shrink-0"></i>
+      Команда
     </a>
-    <a href="#" class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-slate-600 cursor-default">
-      <span class="w-4 text-center">⚙</span> Настройки
+    <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[#5a5e66] cursor-default">
+      <i data-lucide="settings" class="w-4 h-4 shrink-0"></i>
+      Настройки
     </a>
   </nav>
 
   <div class="mt-auto px-4 pt-4">
-    <div class="text-[11px] text-slate-500">Хранилище</div>
+    <div class="text-[11px] text-[#5a5e66]">Хранилище</div>
     <div class="h-1.5 rounded-full bg-white/10 mt-1.5 overflow-hidden">
-      <div class="h-full bg-rose-500" style="width: 22%"></div>
+      <div class="h-full bg-violet-500" style="width: 22%"></div>
     </div>
-    <div class="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
-      <div class="w-7 h-7 rounded-full bg-slate-600 text-white text-xs flex items-center justify-center font-medium">RB</div>
+    <div class="flex items-center gap-2 mt-4 pt-4 border-t border-[#1f2023]">
+      <div class="w-7 h-7 rounded-full bg-[#2a2c30] text-[#f7f8f8] text-xs flex items-center justify-center font-medium">RB</div>
       <div class="text-xs">
-        <div class="text-slate-200 font-medium">Roman</div>
-        <div class="text-slate-500">Admin</div>
+        <div class="text-[#f7f8f8] font-medium">Roman</div>
+        <div class="text-[#5a5e66]">Admin</div>
       </div>
     </div>
   </div>
@@ -52,7 +63,7 @@
     </div>
     <div class="flex items-center gap-3 shrink-0">
       <input type="search" placeholder="Поиск…"
-             class="hidden sm:block text-sm bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-rose-200">
+             class="hidden sm:block text-sm bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-violet-200">
     </div>
   </header>
 
@@ -61,5 +72,6 @@
   </main>
 </div>
 
+<script>lucide.createIcons();</script>
 </body>
 </html>
