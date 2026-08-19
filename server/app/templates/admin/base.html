@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CV Fitness{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{font-family:"Inter",system-ui,sans-serif}</style>
+</head>
+<body class="bg-white text-slate-900 min-h-screen flex">
+
+<aside class="w-56 shrink-0 bg-[#14171f] text-slate-300 flex flex-col py-4">
+  <div class="px-4 mb-6 flex items-center gap-2">
+    <div class="w-6 h-6 rounded bg-rose-500"></div>
+    <span class="font-semibold text-[15px] text-white">cv.fitness</span>
+  </div>
+
+  <nav class="px-2 space-y-0.5 text-sm">
+    <a href="/" class="flex items-center gap-2 px-2.5 py-1.5 rounded-md {{ 'bg-rose-500/15 text-rose-400 font-medium' if active == 'videos' else 'text-slate-400 hover:bg-white/5 hover:text-slate-200' }}">
+      <span class="w-4 text-center">▤</span> Видео
+    </a>
+    <a href="#" class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-slate-600 cursor-default">
+      <span class="w-4 text-center">👥</span> Команда
+    </a>
+    <a href="#" class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-slate-600 cursor-default">
+      <span class="w-4 text-center">⚙</span> Настройки
+    </a>
+  </nav>
+
+  <div class="mt-auto px-4 pt-4">
+    <div class="text-[11px] text-slate-500">Хранилище</div>
+    <div class="h-1.5 rounded-full bg-white/10 mt-1.5 overflow-hidden">
+      <div class="h-full bg-rose-500" style="width: 22%"></div>
+    </div>
+    <div class="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
+      <div class="w-7 h-7 rounded-full bg-slate-600 text-white text-xs flex items-center justify-center font-medium">RB</div>
+      <div class="text-xs">
+        <div class="text-slate-200 font-medium">Roman</div>
+        <div class="text-slate-500">Admin</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div class="flex-1 min-w-0 flex flex-col bg-slate-50">
+  <header class="h-14 border-b border-slate-200 flex items-center justify-between px-6 gap-4 bg-white">
+    <div class="flex items-center gap-1.5 text-sm text-slate-500 min-w-0">
+      <a href="/" class="hover:text-slate-900 shrink-0">Видео</a>
+      {% block breadcrumb %}{% endblock %}
+    </div>
+    <div class="flex items-center gap-3 shrink-0">
+      <input type="search" placeholder="Поиск…"
+             class="hidden sm:block text-sm bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-rose-200">
+    </div>
+  </header>
+
+  <main class="flex-1 px-6 py-6 min-w-0">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+</body>
+</html>

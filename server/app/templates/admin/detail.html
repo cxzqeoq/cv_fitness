@@ -1,0 +1,105 @@
+{% extends "admin/base.html" %}
+{% block breadcrumb %}<span class="text-slate-300">/</span><span class="text-slate-900 font-medium truncate">{{ video.original_name if video else "—" }}</span>{% endblock %}
+{% block content %}
+{% if not video %}
+<p class="text-slate-400">Видео не найдено.</p>
+{% else %}
+{% set badge = {"pending": "bg-slate-100 text-slate-500", "processing": "bg-amber-50 text-amber-600",
+                 "done": "bg-emerald-50 text-emerald-600", "failed": "bg-red-50 text-red-600"} %}
+{% set label = {"pending": "в очереди", "processing": "обработка", "done": "готово", "failed": "ошибка"} %}
+
+<div class="flex items-start justify-between gap-4 mb-5">
+  <div class="flex items-center gap-3 min-w-0">
+    <a href="/" class="text-slate-400 hover:text-slate-700 text-lg">←</a>
+    <div class="w-14 h-9 rounded-md bg-slate-900 overflow-hidden shrink-0">
+      {% if video.segments %}<img src="/api/videos/{{ video.id }}/segments/1/thumb" class="w-full h-full object-cover">{% endif %}
+    </div>
+    <div class="min-w-0">
+      <h1 class="text-base font-semibold truncate">{{ video.original_name }}</h1>
+      <div class="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+        <span class="px-2 py-0.5 rounded-full font-medium {{ badge[video.status.value] }}">{{ label[video.status.value] }}</span>
+        <span>{{ video.segments|length }} сегментов</span>
+        {% if video.duration_sec %}<span>{{ (video.duration_sec // 60)|int }}:{{ "%02d"|format(video.duration_sec % 60) }}</span>{% endif %}
+        {% if video.error %}<span class="text-red-500">{{ video.error }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% if video.status.value == "done" %}
+  <div class="flex items-center gap-2 shrink-0">
+    <form action="/{{ video.id }}/describe" method="post">
+      <button class="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-md px-3.5 py-1.5">
+        ✨ Описать сегменты
+      </button>
+    </form>
+    <a href="/watch/{{ video.id }}" target="_blank"
+       class="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
+      ▶ Смотреть
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+{% if video.status.value == "processing" %}
+<div class="mb-6 max-w-md">
+  <div class="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+    <div class="h-full bg-rose-500" style="width: {{ ((video.frames_done or 0) / video.frames_total * 100) if video.frames_total else 0 }}%"></div>
+  </div>
+  <p class="text-xs text-slate-400 mt-1.5">{{ video.frames_done or 0 }} / {{ video.frames_total or "?" }} кадров</p>
+</div>
+<script>setTimeout(() => location.reload(), 4000);</script>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4 mb-8">
+  <video id="player" src="/api/videos/{{ video.id }}/file" controls
+         class="w-full rounded-lg border border-slate-200 bg-black aspect-video"></video>
+
+  <div class="border border-slate-200 rounded-lg bg-white p-4 overflow-x-auto">
+    <div class="text-xs text-slate-400 font-medium mb-2">Таймлайн · {{ video.segments|length }} сегментов</div>
+    {% if video.duration_sec and video.segments %}
+    <div class="relative h-16 rounded-md bg-gradient-to-b from-slate-50 to-slate-100 min-w-[480px]">
+      {% for s in video.segments %}
+      <div class="absolute top-0 h-full bg-rose-400/25 border-x border-rose-400/60"
+           style="left: {{ (s.start_sec / video.duration_sec * 100) }}%; width: {{ ((s.end_sec - s.start_sec) / video.duration_sec * 100) }}%;"
+           title="{{ s.label }}"></div>
+      {% endfor %}
+    </div>
+    <div class="flex flex-wrap gap-1 mt-2 min-w-[480px]">
+      {% for s in video.segments %}
+      <span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-medium">{{ loop.index }}</span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="h-16 rounded-md bg-slate-50 flex items-center justify-center text-xs text-slate-400">нет данных</div>
+    {% endif %}
+  </div>
+</div>
+
+<h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Клипы ({{ video.segments|length }})</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+  {% for s in video.segments %}
+  <form action="/{{ video.id }}/segments/{{ s.id }}" method="post"
+        class="border border-slate-200 rounded-lg bg-white overflow-hidden flex flex-col">
+    <div class="relative aspect-video bg-slate-900">
+      <img src="/api/videos/{{ video.id }}/segments/{{ loop.index }}/thumb" class="w-full h-full object-cover" loading="lazy"
+           onerror="this.style.display='none'">
+      <span class="absolute top-1.5 left-1.5 text-[11px] font-semibold bg-black/70 text-white rounded px-1.5 py-0.5">{{ loop.index }}</span>
+      <span class="absolute bottom-1.5 right-1.5 text-[11px] font-medium bg-black/70 text-white rounded px-1.5 py-0.5">
+        {{ "%d:%02d"|format(s.start_sec // 60, s.start_sec % 60) }}–{{ "%d:%02d"|format(s.end_sec // 60, s.end_sec % 60) }}
+      </span>
+    </div>
+    <div class="p-3 space-y-2 flex-1 flex flex-col">
+      <input name="label" value="{{ s.label or '' }}" placeholder="Название упражнения"
+             class="w-full text-sm font-medium bg-transparent border-0 border-b border-transparent hover:border-slate-200 focus:border-rose-300 focus:outline-none px-0 py-1">
+      <textarea name="description" placeholder="Описание, что происходит" rows="2"
+                class="w-full text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-rose-200">{{ s.description or '' }}</textarea>
+      <textarea name="subtitle" placeholder="Субтитры" rows="2"
+                class="w-full text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-rose-200">{{ s.subtitle or '' }}</textarea>
+      <button class="mt-auto self-start bg-slate-900 hover:bg-slate-800 text-white rounded-md px-3 py-1 text-xs font-medium">Сохранить</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="text-slate-400 text-sm col-span-full">Сегменты ещё не готовы.</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

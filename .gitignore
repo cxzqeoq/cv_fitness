@@ -7,3 +7,5 @@ segtest/videos/
 segtest/models/
 __pycache__/
 *.pyc
+server/storage/
+server/.env

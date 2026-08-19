@@ -1,0 +1,53 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="flex items-center justify-between mb-5">
+  <h1 class="text-lg font-semibold">Видео</h1>
+  <form action="/upload" method="post" enctype="multipart/form-data" class="flex items-center gap-2">
+    <input type="file" name="file" accept="video/*" required id="file-input" class="hidden"
+           onchange="this.form.requestSubmit()">
+    <label for="file-input"
+           class="cursor-pointer inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
+      ⭱ Загрузить
+    </label>
+  </form>
+</div>
+
+<div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-200 bg-slate-50/60">
+        <th class="py-2.5 px-4 font-medium">Название</th>
+        <th class="py-2.5 px-4 font-medium">Статус</th>
+        <th class="py-2.5 px-4 font-medium">Длительность</th>
+        <th class="py-2.5 px-4 font-medium">Сегментов</th>
+        <th class="py-2.5 px-4 font-medium">Загружено</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in videos %}
+      <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+        <td class="py-2.5 px-4">
+          <a href="/{{ v.id }}" class="flex items-center gap-2.5 text-slate-800 hover:text-rose-600">
+            <span class="w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-xs">▶</span>
+            <span class="font-medium">{{ v.original_name }}</span>
+          </a>
+        </td>
+        <td class="py-2.5 px-4">
+          {% set badge = {"pending": "bg-slate-100 text-slate-500", "processing": "bg-amber-50 text-amber-600",
+                           "done": "bg-emerald-50 text-emerald-600", "failed": "bg-red-50 text-red-600"} %}
+          {% set label = {"pending": "в очереди", "processing": "обработка", "done": "готово", "failed": "ошибка"} %}
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium {{ badge[v.status.value] }}">{{ label[v.status.value] }}</span>
+        </td>
+        <td class="py-2.5 px-4 text-slate-500">
+          {% if v.duration_sec %}{{ (v.duration_sec // 60)|int }}:{{ "%02d"|format(v.duration_sec % 60) }}{% else %}—{% endif %}
+        </td>
+        <td class="py-2.5 px-4 text-slate-500">{{ v.segments|length or "—" }}</td>
+        <td class="py-2.5 px-4 text-slate-400">{{ v.created_at.strftime("%d.%m %H:%M") if v.created_at else "—" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="py-10 text-center text-slate-400">Пока пусто — загрузи первое видео.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
