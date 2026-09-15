@@ -376,9 +376,73 @@ export function contextDistance(windows, t, norms, ctxSec = WINDOW){
   return changeDistance(ml, mr, norms);
 }
 
-// ── кандидаты и сегменты (чистые функции, юнит-тестируются) ──
+// Сглаживание сигнала медианным фильтром по времени.
+// channels — список полей для сглаживания (comb, Dm, Dp).
+export function smoothSignal(signal, window = 3, channels = ["comb", "Dm", "Dp"]){
+  if (!signal || signal.length < 3 || window < 2) return signal;
+  const out = signal.map(s => ({ ...s }));
+  const half = Math.floor(window / 2);
+  for (const ch of channels){
+    for (let i = 0; i < signal.length; i++){
+      const vals = [];
+      for (let j = Math.max(0, i - half); j <= Math.min(signal.length - 1, i + half); j++){
+        const v = signal[j][ch];
+        if (v != null && isFinite(v)) vals.push(v);
+      }
+      if (vals.length) out[i][ch] = median(vals);
+    }
+  }
+  return out;
+}
 
-// Автопорог из перцентилей сигнала: high = pctHigh, low = pctLow.
+// Подпись сегмента — медиана подписей окон, чьи tMid лежат внутри [start, end]
+// (с возможным расширением/сужением). Используется для сравнения паттернов соседних
+// сегментов в mergeSimilarSegments.
+export function segmentSignature(windows, start, end, pad = 0){
+  const sels = windows.filter(w => w.tMid >= start - pad && w.tMid <= end + pad);
+  return medianWin(sels);
+}
+
+// Сравнение паттернов соседних сегментов: если они похожи — объединяем.
+// Это главный способ отделить «вариацию интенсивности внутри упражнения»
+// от «смены упражнения».
+// segments: [{start, end, boundary, conf, dom}] (возвращаемые segmentsFromCandidates).
+// windows: [{tMid, sig}] из buildWindows.
+// norms: глобальные или локальные нормы.
+// opts: {mergeThr=0.55, maxIter=10, pad=0}
+// mergeThr — similarity, выше которого сегменты объединяются.
+// similarity = 1 / (1 + changeDistance(...)).
+export function mergeSimilarSegments(segments, windows, norms, opts = {}){
+  const { mergeThr = 0.55, maxIter = 10, pad = 0 } = opts;
+  if (!segments || segments.length < 2) return segments;
+  let segs = segments.slice();
+  for (let iter = 0; iter < maxIter; iter++){
+    let bestSim = -1, bestIdx = -1;
+    for (let i = 0; i < segs.length - 1; i++){
+      const sigL = segmentSignature(windows, segs[i].start, segs[i].end, pad);
+      const sigR = segmentSignature(windows, segs[i + 1].start, segs[i + 1].end, pad);
+      if (!sigL || !sigR) continue;
+      const d = changeDistance(sigL, sigR, norms);
+      if (d.combined == null) continue;
+      const sim = 1 / (1 + d.combined);
+      if (sim > bestSim){ bestSim = sim; bestIdx = i; }
+    }
+    if (bestSim < mergeThr || bestIdx < 0) break;
+    // объединяем bestIdx и bestIdx+1
+    const a = segs[bestIdx], b = segs[bestIdx + 1];
+    const merged = {
+      n: a.n,
+      start: a.start,
+      end: b.end,
+      boundary: b.boundary,
+      conf: b.conf,
+      dom: b.dom
+    };
+    segs.splice(bestIdx, 2, merged);
+  }
+  segs.forEach((s, i) => { s.n = i + 1; });
+  return segs;
+}
 // Возвращает {high, low} или null, если сигнал слишком мал/вырожден.
 export function autothreshold(sig, pctHigh = 0.95, pctLow = 0.7, channel = "comb"){
   const vals = sig.map(s => s[channel]).filter(v => v != null && isFinite(v));
@@ -438,6 +502,58 @@ export function detectCandidatesUnion(signal, opts = {}){
   return out;
 }
 
+// Пост-обработка кандидатов: фильтр вырожденных, prominence и NMS по расстоянию.
+// cands: массив кандидатов от detectCandidates / detectCandidatesUnion.
+// signal: [{t, comb, Dm, Dp}] — используется для prominence (окно ±promWindowSec).
+// opts:
+//   minProm      — мин. prominence (разница между пиком и ближайшим лок. минимумом)
+//   promWindowSec— окно поиска локальных минимумов вокруг пика (с)
+//   minDist      — мин. расстояние между границами после NMS (с)
+//   minConf      — мин. conf (peak - base)
+//   requireSignal— требовать, чтобы у кандидата был хотя бы один из Dm/Dp.
+export function refineCandidates(cands, signal, opts = {}){
+  const {
+    minProm = 0.3,
+    promWindowSec = 30,
+    minDist = 12,
+    minConf = 0.05,
+    requireSignal = true
+  } = opts;
+  if (!cands.length) return [];
+
+  const dt = signal.length > 1 ? (signal[1].t - signal[0].t) : 2;
+  const halfWin = Math.max(1, Math.round(promWindowSec / 2 / dt));
+  const combVals = signal.map(s => s.comb ?? 0);
+
+  // 1. фильтр вырожденных
+  let filtered = cands.filter(c =>
+    c.conf >= minConf &&
+    (!requireSignal || c.Dm != null || c.Dp != null)
+  );
+
+  // 2. prominence
+  filtered = filtered.filter(c => {
+    const idx = signal.findIndex(s => s.t === c.peakT);
+    if (idx < 0) return true;
+    let leftMin = Infinity, rightMin = Infinity;
+    for (let i = Math.max(0, idx - halfWin); i < idx; i++)
+      leftMin = Math.min(leftMin, combVals[i]);
+    for (let i = idx + 1; i < Math.min(combVals.length, idx + halfWin + 1); i++)
+      rightMin = Math.min(rightMin, combVals[i]);
+    const base = Math.min(leftMin, rightMin);
+    return c.peak - base >= minProm;
+  });
+
+  // 3. NMS по расстоянию (сортировка по conf убыванию)
+  filtered.sort((a, b) => b.conf - a.conf);
+  const out = [];
+  for (const c of filtered){
+    if (out.some(o => Math.abs(o.boundary - c.boundary) < minDist)) continue;
+    out.push(c);
+  }
+  return out.sort((a, b) => a.boundary - b.boundary);
+}
+
 function finish(sig, a, b, frac, channel){
   let base = Infinity;
   for (let i = Math.max(0, a - 3); i <= a; i++)
@@ -466,19 +582,51 @@ function finish(sig, a, b, frac, channel){
 // Сегменты из кандидатов: границы делят [t0, duration] на интервалы.
 // Каждый сегмент заканчивается границей (transition к следующему упражнению),
 // последний тянется до конца видео. Возвращает [{n, start, end, boundary, conf, dom}].
-export function segmentsFromCandidates(cands, duration, t0 = 0){
-  const segs = [];
+// minSegSec: если сегмент короче, он объединяется с соседом, имеющим меньшую conf.
+export function segmentsFromCandidates(cands, duration, t0 = 0, minSegSec = 0){
+  const initial = [];
   let prev = t0;
   let n = 1;
   for (const c of cands){
     if (c.boundary <= prev + 0.05) continue;
-    segs.push({ n: n++, start: prev, end: c.boundary, boundary: c.boundary,
-                conf: c.conf, dom: dominant(c) });
+    initial.push({ n: n++, start: prev, end: c.boundary, boundary: c.boundary,
+                   conf: c.conf, dom: dominant(c) });
     prev = c.boundary;
   }
-  if (duration - prev > 0.05 || !segs.length){
-    segs.push({ n: n++, start: prev, end: duration, boundary: null, conf: null, dom: null });
+  if (duration - prev > 0.05 || !initial.length){
+    initial.push({ n: n++, start: prev, end: duration, boundary: null, conf: null, dom: null });
   }
+  if (!minSegSec || minSegSec <= 0) return initial;
+
+  const segs = initial.slice();
+  let changed = true;
+  while (changed){
+    changed = false;
+    for (let i = 0; i < segs.length - 1; i++){
+      if (segs[i].end - segs[i].start < minSegSec){
+        const leftConf = i > 0 ? (segs[i - 1].conf ?? Infinity) : Infinity;
+        const rightConf = segs[i + 1].conf ?? Infinity;
+        // объединяем с соседом, у которого conf меньше (менее значимая граница)
+        if (rightConf <= leftConf){
+          segs[i].end = segs[i + 1].end;
+          segs[i].boundary = segs[i + 1].boundary;
+          segs[i].conf = segs[i + 1].conf;
+          segs[i].dom = segs[i + 1].dom;
+          segs.splice(i + 1, 1);
+        } else {
+          segs[i - 1].end = segs[i].end;
+          segs[i - 1].boundary = segs[i].boundary;
+          segs[i - 1].conf = segs[i].conf;
+          segs[i - 1].dom = segs[i].dom;
+          segs.splice(i, 1);
+        }
+        changed = true;
+        break;
+      }
+    }
+  }
+  // перенумеровать
+  segs.forEach((s, i) => { s.n = i + 1; });
   return segs;
 }
 

@@ -7,13 +7,16 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { frameDescriptors, buildWindows, madNormalize, madNormalizeLocal, contextDistance,
-         autothreshold, detectCandidatesUnion, segmentsFromCandidates } from "../js/signature.js";
+         autothreshold, detectCandidatesUnion, refineCandidates, segmentsFromCandidates,
+         mergeSimilarSegments } from "../js/signature.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const name = process.argv[2] || "clip1";
 const NORM = process.argv[3] || "global"; // global | cap | local
 const RATE = parseFloat(process.argv[4]) || 0; // 0 — исходная частота (не прореживать)
 const WIN = 5, STEP = 2, CTX = 5, RADIUS = 120, FRAC = 0.7;
+const MIN_PROM = 0.3, MIN_DIST = 12, MIN_CONF = 0.05, MIN_SEG = 8;
+const MERGE = process.argv[5] === "merge" || false; // пятый аргумент "merge" — включить слияние похожих
 
 const json = JSON.parse(readFileSync(join(HERE, "..", "data", name + "_wm.json"), "utf-8"));
 const srcRate = json.rate_hz || 5;
@@ -46,8 +49,10 @@ const signal = wins.map((w, i) => {
   const chg = Dm != null || Dp != null ? Math.max(Dm ?? 0, Dp ?? 0) : null;
   return { t: w.tMid, Dm, Dp, comb: d.combined ?? null, chg };
 });
-const cands = detectCandidatesUnion(signal, { frac: FRAC, dupSec: 3, combPct: [0.95, 0.7], chgPct: [0.9, 0.7] });
-const segments = segmentsFromCandidates(cands, dur);
+const candsRaw = detectCandidatesUnion(signal, { frac: FRAC, dupSec: 3, combPct: [0.95, 0.7], chgPct: [0.9, 0.7] });
+const cands = refineCandidates(candsRaw, signal, { minProm: MIN_PROM, minDist: MIN_DIST, minConf: MIN_CONF });
+let segments = segmentsFromCandidates(cands, dur, 0, MIN_SEG);
+if (MERGE) segments = mergeSimilarSegments(segments, wins, madNormalize(wins), { mergeThr: 0.55, maxIter: 20, pad: 0 });
 
 const valid = frames.filter(f => f.desc).length;
 console.log(`${name}: dur=${dur.toFixed(1)} с · кадров ${frames.length} (валид ${valid}) · окон ${wins.length} · норм=${NORM}${NORM === "global" ? "" : "(" + RADIUS + "с)"} · rate=${RATE || srcRate} Гц (исх. ${srcRate})`);
@@ -61,7 +66,7 @@ if (vals.length){
 } else {
   console.log("сигнал пуст — нечего сегментировать");
 }
-console.log(`кандидаты (union): ${cands.length}`);
+console.log(`кандидаты (union): ${candsRaw.length} → после refine: ${cands.length}`);
 for (const c of cands){
   const dom = c.Dm == null && c.Dp == null ? "—"
     : c.Dm == null ? "D_pose" : c.Dp == null ? "D_motion"
@@ -75,7 +80,7 @@ for (const s of segments)
 const out = {
   settings: { win: WIN, step: STEP, ctx: CTX, rate: RATE || srcRate,
               norm: NORM, radius: RADIUS, frac: FRAC, dup: 3, iou: 0.3,
-              combPct: [0.95, 0.7], chgPct: [0.9, 0.7] },
+              combPct: [0.95, 0.7], chgPct: [0.9, 0.7], merge: MERGE },
   duration: +dur.toFixed(3), frames: frames.length, refs: [],
   cands: cands.map(c => ({ ...c, peak: +c.peak.toFixed(3), conf: +c.conf.toFixed(3) })),
   segments,

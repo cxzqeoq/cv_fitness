@@ -8,8 +8,9 @@
 // кандидаты-интервалы с гистерезисом, граница = 70% нарастания, метрики против референса.
 import { $, say, ensureMeta } from "./utils.js";
 import { makeLandmarker, close, clearModelCache } from "./model.js";
-import { frameDescriptors, buildWindows, madNormalize, contextDistance,
-         detectCandidates, segmentsFromCandidates, autothreshold, detectCandidatesUnion } from "./signature.js";
+import { frameDescriptors, buildWindows, madNormalize, madNormalizeLocal, contextDistance,
+         detectCandidates, segmentsFromCandidates, autothreshold, detectCandidatesUnion,
+         refineCandidates, mergeSimilarSegments } from "./signature.js";
 
 const v = document.getElementById("segVideo");
 const cv = document.getElementById("timeline");
@@ -17,6 +18,7 @@ const cg = cv.getContext("2d");
 
 let lm = null, blobUrl = null;
 let frames = [], signal = [], cands = [], segments = [], refs = [];
+let wins = [], norms = null;
 let running = false, cancel = false;
 let lastT = -1, lastTs = -1;
 let dur = 0;
@@ -165,10 +167,12 @@ function processFrame(t){
 // ── сигналы из кадров ──
 function computeSignal(){
   const win = +$("win").value, step = +$("step").value, ctxSec = +$("ctx").value;
-  const wins = buildWindows(frames, win, step);
-  const norms = madNormalize(wins);
-  signal = wins.map(w => {
-    const d = contextDistance(wins, w.tMid, norms, ctxSec) || {};
+  const RADIUS = 120;
+  wins = buildWindows(frames, win, step);
+  const normMode = $("norm").value;
+  norms = normMode === "global" ? madNormalize(wins) : madNormalizeLocal(wins, RADIUS, normMode === "cap");
+  signal = wins.map((w, i) => {
+    const d = contextDistance(wins, w.tMid, normMode === "global" ? norms : norms[i], ctxSec) || {};
     const Dm = d.D_motion ?? null, Dp = d.D_pose ?? null;
     const chg = Dm != null || Dp != null ? Math.max(Dm ?? 0, Dp ?? 0) : null;
     return { t: w.tMid, Dm, Dp, comb: d.combined ?? null, chg };
@@ -176,20 +180,23 @@ function computeSignal(){
   updateCandidates();
 }
 
-// ── кандидаты: автопорог + гистерезис (логика в signature.js) ──
+// ── кандидаты: автопорог + гистерезис → refine → сегменты ──
 function updateCandidates(){
+  let raw;
   if ($("auto").checked){
     const at = autothreshold(signal);
     if (at){
       $("high").value = +at.high.toFixed(3);
       $("low").value = +at.low.toFixed(3);
     }
-    cands = detectCandidatesUnion(signal, { frac: +$("frac").value, dupSec: 3, combPct: [0.95, 0.7], chgPct: [0.9, 0.7] });
+    raw = detectCandidatesUnion(signal, { frac: +$("frac").value, dupSec: 3, combPct: [0.95, 0.7], chgPct: [0.9, 0.7] });
   } else {
     const high = +$("high").value, low = +$("low").value, frac = +$("frac").value;
-    cands = detectCandidates(signal, high, low, frac, "comb");
+    raw = detectCandidates(signal, high, low, frac, "comb");
   }
-  segments = segmentsFromCandidates(cands, dur);
+  cands = refineCandidates(raw, signal, { minProm: 0.3, minDist: 12, minConf: 0.05 });
+  segments = segmentsFromCandidates(cands, dur, 0, 8);
+  if ($("merge").checked) segments = mergeSimilarSegments(segments, wins, madNormalize(wins), { mergeThr: 0.55, maxIter: 20, pad: 0 });
   drawAll();
   renderSegments();
   renderMetrics();
@@ -432,7 +439,8 @@ function exportConfig(){
       win: +$("win").value, step: +$("step").value, ctx: +$("ctx").value,
       rate: +$("rate").value, high: +$("high").value, low: +$("low").value,
       frac: +$("frac").value, iou: +$("iou").value,
-      norm: "global", combPct: [0.95, 0.7], chgPct: [0.9, 0.7], dup: 3
+      norm: $("norm").value, merge: $("merge").checked,
+      combPct: [0.95, 0.7], chgPct: [0.9, 0.7], dup: 3
     },
     duration: dur, frames: frames.length,
     refs, cands: cands.map(c => ({ ...c, peak: +c.peak.toFixed(3), conf: +c.conf.toFixed(3) })),
@@ -472,6 +480,8 @@ export function init(){
   for (const id of ["win", "step", "ctx"]){
     $(id).addEventListener("change", () => { if (signal.length) computeSignal(); });
   }
+  $("norm").addEventListener("change", () => { if (signal.length) computeSignal(); });
+  $("merge").addEventListener("change", () => { if (signal.length) updateCandidates(); });
   $("rate").addEventListener("change", () => { try { v.playbackRate = +$("rate").value; } catch(_){} });
   for (const id of ["high", "low", "frac", "iou"]){
     $(id).addEventListener("input", () => { if (signal.length) updateCandidates(); });
