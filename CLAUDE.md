@@ -99,6 +99,23 @@ Production callback `https://omra.fitness/auth/callback` зарегистрир�
 ssh zaurus 'pct exec 169 -- sh -lc "cd /opt/omra.fitness/server && docker compose up -d --build"'
 ```
 
+## Текущее состояние проекта — 2026-09-16
+
+- Этапы 0–2 из `ROADMAP.md` завершены: tenant boundary, `Assignment`/`Submission`,
+  программы, уроки и enrollment работают end-to-end.
+- Реализация этапа 3 завершена в коде: Fitness принимает подписанный `message.in`,
+  копирует video attachment из `omra.crm`, дедуплицирует событие, создаёт попытку,
+  запускает pose pipeline и доставляет исходящие сообщения через persistent outbox.
+- Актуальная миграция Fitness: `f8c1a4b6d902`; локальная Postgres на head.
+- Последняя полная проверка Fitness: 28 tests passed; browser smoke проверил CRM binding
+  и принятие messenger submission. Cross-service smoke доказал retry после outage и
+  запрет cross-tenant attachment.
+- Коммиты этапа 3: Fitness `0035407`, `omra.crm` `78923b78`.
+- Незакрытый gate этапа 3: реальный Telegram round trip. В локальном `omra.crm` нет
+  рабочего Telegram agent/session; тестовые `telegram_user` agents имеют пустой config
+  и невалидные session keys. До этого smoke этап 4 не публиковать.
+- Задачи следующей сессии ведутся в `ROADMAP.md` → «Бэклог на завтра».
+
 ## Общие правила проекта (см. также `~/.claude/CLAUDE.md`)
 
 - Docker → всегда лог-ротация `json-file` (уже настроено per-service в
