@@ -1,10 +1,9 @@
 import hmac
 import secrets
+import uuid
 from datetime import datetime, timezone
 from urllib.parse import parse_qs
 
-from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from authlib.integrations.starlette_client import OAuth
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -19,18 +18,16 @@ from .config import (
     OMRA_IS_INTERNAL_URL,
     OMRA_IS_ISSUER,
 )
-from .db import SessionLocal
+from .db import SessionLocal, set_tenant
 from .models import (
     AuditEvent,
     NotificationRecipient,
     Student,
-    StudentAccount,
     TeamMember,
     TeamRole,
 )
 from .notification_service import unread_count
 
-_password_hasher = PasswordHasher(time_cost=3, memory_cost=65_536, parallelism=2)
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 STAFF_ROLES = frozenset(role.value for role in TeamRole)
 
@@ -58,15 +55,6 @@ oauth.register(
 )
 
 
-def hash_password(password: str) -> str:
-    return _password_hasher.hash(password)
-
-
-def verify_password(password_hash: str, password: str) -> bool:
-    try:
-        return _password_hasher.verify(password_hash, password)
-    except (InvalidHashError, VerifyMismatchError):
-        return False
 
 
 def csrf_token(request: Request) -> str:
@@ -77,9 +65,19 @@ def csrf_token(request: Request) -> str:
     return token
 
 
-def start_session(request: Request, *, kind: str, account_id: int) -> None:
+def start_session(
+    request: Request,
+    *,
+    kind: str,
+    account_id: int,
+    org_id: uuid.UUID | str,
+) -> None:
     request.session.clear()
-    request.session["principal"] = {"kind": kind, "account_id": account_id}
+    request.session["principal"] = {
+        "kind": kind,
+        "account_id": account_id,
+        "org_id": str(org_id),
+    }
     request.session["csrf_token"] = secrets.token_urlsafe(32)
 
 
@@ -120,7 +118,7 @@ def _is_public(path: str) -> bool:
         or path == "/auth/callback"
         or path == "/auth/dev"
         or path == "/student/login"
-        or path == "/student/register"
+        or path == "/student/auth/start"
         or path.startswith("/watch/")
         or path.startswith("/api/public/")
         or path.startswith("/static/")
@@ -213,10 +211,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return None
         kind = stored.get("kind")
         account_id = stored.get("account_id")
+        try:
+            org_id = uuid.UUID(str(stored.get("org_id") or ""))
+        except ValueError:
+            request.session.pop("principal", None)
+            return None
         if not isinstance(account_id, int):
             request.session.pop("principal", None)
             return None
         db = SessionLocal()
+        set_tenant(db, org_id)
         try:
             if kind == "staff":
                 member = db.get(TeamMember, account_id)
@@ -226,6 +230,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 return {
                     "kind": "staff",
                     "id": member.id,
+                    "org_id": str(member.org_id),
                     "name": member.name,
                     "email": member.email,
                     "role": member.role.value,
@@ -236,17 +241,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     ),
                 }
             if kind == "student":
-                account = db.get(StudentAccount, account_id)
-                student = db.get(Student, account.student_id) if account is not None else None
-                if account is None or student is None or student.status.value != "active":
+                student = db.get(Student, account_id)
+                if student is None or student.status.value != "active":
                     request.session.pop("principal", None)
                     return None
                 return {
                     "kind": "student",
-                    "id": account.id,
+                    "id": student.id,
                     "student_id": student.id,
+                    "org_id": str(student.org_id),
                     "name": student.name,
-                    "email": account.email,
+                    "email": student.email,
                     "role": "student",
                     "unread_notifications": unread_count(
                         db,
@@ -262,6 +267,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _audit(principal: dict, request: Request, status_code: int) -> None:
         db = SessionLocal()
+        set_tenant(db, principal["org_id"])
         try:
             db.add(
                 AuditEvent(

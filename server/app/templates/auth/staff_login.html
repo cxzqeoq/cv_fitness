@@ -8,5 +8,5 @@
 <div class="my-5 flex items-center gap-3 text-[10px] uppercase tracking-wide text-slate-600"><span class="h-px bg-white/10 flex-1"></span>локальная разработка<span class="h-px bg-white/10 flex-1"></span></div>
 <form action="/auth/dev" method="post" class="space-y-3"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label class="block text-xs text-slate-400">Участник команды<select name="member_id" required class="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-200">{% for member in dev_members %}<option value="{{ member.id }}">{{ member.name }} · {{ member.role.value }}</option>{% endfor %}</select></label><button class="w-full rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium hover:bg-white/5">Войти локально</button></form>
 {% endif %}
-<p class="mt-6 text-center text-xs text-slate-500">Вы ученик? <a href="/student/login" class="text-violet-400 hover:text-violet-300">Войти по email</a></p>
+<p class="mt-6 text-center text-xs text-slate-500">Вы ученик? <a href="/student/login" class="text-violet-400 hover:text-violet-300">Войти в кабинет</a></p>
 {% endblock %}

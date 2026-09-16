@@ -1,5 +1,5 @@
 from .assessment import AssessmentStatus, SegmentAssessment, VideoAssessment
-from .auth import AuditEvent, StaffIdentity, StudentAccount
+from .auth import AuditEvent
 from .exercise import Exercise, ExerciseStatus, SegmentComparison, SegmentExercise
 from .notification import Notification, NotificationEvent, NotificationRecipient
 from .publication import VideoPublication
@@ -23,11 +23,9 @@ __all__ = [
     "NotificationRecipient",
     "SegmentComparison",
     "SegmentExercise",
-    "StaffIdentity",
     "Student",
     "StudentStatus",
     "StudentVideo",
-    "StudentAccount",
     "TeamMember",
     "TeamRole",
     "Video",

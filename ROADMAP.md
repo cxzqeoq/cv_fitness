@@ -55,12 +55,36 @@
 Интеграции идут через аутентифицированные HTTP-события и идемпотентные команды; тело
 подписывается там, где источник это поддерживает. Ни один сервис не читает чужую базу напрямую.
 
+### Зафиксированный identity и tenant contract
+
+`omra.is` выдаёт в `id_token` проверенные claims:
+
+- `sub` — UUID пользователя;
+- `org_id` — UUID активной организации;
+- `org_role` — `owner | admin | member`;
+- `email`, `email_verified`, `name`;
+- `sid` — идентификатор SSO-сессии, когда доступен.
+
+Fitness использует `sub` и `org_id` как identity/tenant boundary. `org_role` подтверждает
+членство в организации, но не заменяет прикладную роль Fitness (`owner | manager | editor`).
+Локальные таблицы хранят только профиль ученика и продуктовые роли, но не пользователя или пароль.
+
+| Модель | Tenant ownership |
+|---|---|
+| `TeamMember`, `Student`, `Exercise`, `Video`, `AppSettings` | прямой обязательный `org_id` |
+| `Notification`, `AuditEvent` | прямой `org_id` для безопасной выборки и журнала |
+| `StaffIdentity` | заменяется `TeamMember.oidc_sub`; уникальность `(org_id, oidc_sub)` |
+| `StudentAccount` | удаляется после OIDC cutover; `Student.oidc_sub` связывает профиль с `omra.is` |
+| `Assignment` | прямой обязательный `org_id`; это корень учебного workflow |
+| `Segment`, assessments, comparisons, publications, submissions | организация наследуется через родительский `Video`, `Assignment` или `Exercise` |
+| Worker/background processing | получает tenant через обрабатываемый `Video.org_id`, не через browser session |
+
 ## Целевая доменная модель Fitness
 
 ```text
 Student
   org_id
-  identity_user_id
+  oidc_sub
   crm_lead_id
 
 Program
@@ -91,20 +115,24 @@ Enrollment
   status: active | paused | completed | cancelled
 
 Assignment
+  org_id
   student_id
-  exercise_id
+  exercise_id: nullable для миграции и разового задания
+  title
   enrollment_id: nullable для разового задания
   lesson_exercise_id: nullable для разового задания
   due_at
-  status: locked | assigned | in_progress | submitted | completed
-  coach_comment
+  status: locked | assigned | in_progress | submitted | revision_requested | completed
 
 Submission
   assignment_id
   video_id
   attempt
+  status: submitted | in_review | revision_requested | accepted
   student_comment
+  coach_comment
   submitted_at
+  reviewed_at
 ```
 
 `Exercise`, `Video`, `Segment`, `SegmentComparison`, `VideoAssessment` и
@@ -121,6 +149,10 @@ Submission
 
 **Результат:** две школы могут пользоваться одной установкой без возможности увидеть данные
 друг друга.
+
+**Статус:** выполнен 2026-09-16. Миграция применена к локальной Postgres; обязательный
+tenant scope доказан smoke-сценарием с двумя организациями; OIDC-экран ученика проверен
+в браузере.
 
 ### Сделать
 
@@ -168,6 +200,26 @@ Submission
 - После проверки миграции удалить таблицу, модель и все callsites `StudentVideo`.
 - Показывать ученику задание без видео, загрузку новой попытки и историю предыдущих попыток.
 - Считать просрочку из `due_at`, а не хранить отдельный рассинхронизируемый флаг.
+
+### Зафиксированный cutover
+
+1. Добавить `assignments` как корень workflow: `org_id`, `student_id`, опциональный
+   `exercise_id`, обязательный снимок `title`, `due_at`, статус и timestamps.
+2. Добавить `submissions`: `assignment_id`, уникальный внутри задания `attempt`,
+   уникальный `video_id`, статус проверки, комментарии ученика/тренера и timestamps.
+   Частичный уникальный индекс разрешает не более одной принятой попытки на задание.
+3. Одной транзакционной миграцией превратить каждый `StudentVideo` в `Assignment` и
+   `Submission`, сохранив имя упражнения, дату, комментарии и текущий статус. Не вводить
+   dual-write или временную совместимость.
+4. Перевести `assignment_workflow.py`, `progress.py` и роутеры `admin.py`, `api.py`,
+   `assessments.py`, `auth.py`, `students.py`; затем удалить модель, таблицу, импорты и
+   все callsites `StudentVideo`.
+5. Сначала сохранить существующий сценарий просмотра мигрированных видео. Затем добавить
+   создание задания без видео, загрузку попытки учеником и повторную попытку после возврата.
+
+Инварианты: студент и упражнение принадлежат `Assignment.org_id`; `Submission.video_id`
+указывает на видео той же организации; номер попытки монотонен внутри задания; принятие
+попытки завершает задание атомарно; история предыдущих попыток неизменяема.
 
 ### Готово, когда
 
@@ -437,11 +489,6 @@ Submission
 
 ## Ближайшая работа
 
-Первый исполнимый пакет — этап 0:
-
-1. зафиксировать claims `omra.is` для staff и student;
-2. составить таблицу tenant ownership для существующих моделей;
-3. подготовить Alembic-миграцию `org_id` с безопасным backfill;
-4. перевести auth principal и запросы на обязательный org scope;
-5. доказать изоляцию на двух организациях;
-6. только после этого начинать разделение `StudentVideo`.
+Этап 0 завершён. Следующий пакет — зафиксированный выше cutover
+`StudentVideo` → `Assignment` + `Submission`: сначала транзакционная схема и backfill,
+затем единый перенос workflow/callsites, smoke старого назначения и сценарий второй попытки.

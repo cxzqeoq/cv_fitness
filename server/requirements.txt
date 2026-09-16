@@ -8,7 +8,6 @@ mediapipe==0.10.14
 opencv-python-headless==4.10.0.84
 numpy==1.26.4
 alembic==1.13.3
-argon2-cffi==23.1.0
 authlib==1.3.2
 itsdangerous==2.2.0
 httpx==0.27.2

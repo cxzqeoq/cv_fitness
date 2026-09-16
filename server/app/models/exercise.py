@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.sql import func
 
 from ..db import Base
@@ -13,10 +13,13 @@ class ExerciseStatus(str, enum.Enum):
 
 class Exercise(Base):
     __tablename__ = "exercises"
+    __table_args__ = (UniqueConstraint("org_id", "name", name="uq_exercises_org_name"),)
+
+    org_id = Column(Uuid(as_uuid=True), nullable=False, index=True)
 
     angle_tolerance = Column(Integer, nullable=False, default=15)
     id = Column(Integer, primary_key=True)
-    name = Column(String(200), nullable=False, unique=True, index=True)
+    name = Column(String(200), nullable=False, index=True)
     description = Column(Text, nullable=True)
     instructions = Column(Text, nullable=True)
     status = Column(Enum(ExerciseStatus), nullable=False, default=ExerciseStatus.active, index=True)

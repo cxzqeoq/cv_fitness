@@ -1,4 +1,5 @@
 import os
+import uuid
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,6 +18,9 @@ OIDC_REDIRECT_URI = os.environ.get(
     "OIDC_REDIRECT_URI", "http://localhost:8000/auth/callback"
 )
 DEV_STAFF_BYPASS = os.environ.get("DEV_STAFF_BYPASS", "false").lower() == "true"
+BOOTSTRAP_ORG_ID = uuid.UUID(
+    os.environ.get("BOOTSTRAP_ORG_ID", "00000000-0000-0000-0000-000000000001")
+)
 ALLOWED_VIDEO_EXTENSIONS = frozenset({".m4v", ".mov", ".mp4", ".webm"})
 UPLOAD_CHUNK_BYTES = 1024 * 1024
 

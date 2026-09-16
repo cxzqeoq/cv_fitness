@@ -1,36 +1,29 @@
-import re
 import secrets
-from datetime import datetime, timezone
+import uuid
 
 from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..auth import (
     clear_session,
     csrf_token,
     dev_staff_bypass_enabled,
-    hash_password,
     oauth,
     oidc_configured,
     start_session,
-    verify_password,
 )
 from ..assignment_workflow import start_assignment, submit_assignment
 from ..notification_service import notify_reviewers
 from ..config import BASE_DIR, OIDC_REDIRECT_URI
-from ..db import get_db
+from ..db import get_db, set_tenant
 from ..models import (
-    NotificationEvent,
     AssessmentStatus,
-    StaffIdentity,
+    NotificationEvent,
     Student,
-    StudentAccount,
-    StudentStatus,
     StudentVideo,
     TeamMember,
     Video,
@@ -41,7 +34,6 @@ from ..settings_store import get_app_settings
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _auth_context(request: Request, **values) -> dict:
@@ -102,6 +94,19 @@ def staff_login_page(
 async def staff_login_start(request: Request):
     if not oidc_configured():
         return _login_redirect("/auth/login", "Вход через omra.is ещё не настроен.")
+    request.session["oidc_login_kind"] = "staff"
+    return await _oidc_redirect(request)
+
+
+@router.get("/student/auth/start")
+async def student_login_start(request: Request):
+    if not oidc_configured():
+        return _login_redirect("/student/login", "Вход через omra.is ещё не настроен.")
+    request.session["oidc_login_kind"] = "student"
+    return await _oidc_redirect(request)
+
+
+async def _oidc_redirect(request: Request):
     nonce = secrets.token_urlsafe(32)
     return await oauth.omra_is.authorize_redirect(
         request,
@@ -110,28 +115,75 @@ async def staff_login_start(request: Request):
     )
 
 
+def _oidc_identity(claims: dict) -> tuple[str, str, uuid.UUID] | None:
+    subject = str(claims.get("sub") or "")
+    email = str(claims.get("email") or "").strip().lower()
+    email_verified = claims.get("email_verified") is True
+    org_role = str(claims.get("org_role") or "")
+    try:
+        org_id = uuid.UUID(str(claims.get("org_id") or ""))
+    except ValueError:
+        return None
+    if (
+        not subject
+        or not email
+        or not email_verified
+        or org_role not in {"owner", "admin", "member"}
+    ):
+        return None
+    return subject, email, org_id
+
+
 @router.get("/auth/callback")
-async def staff_login_callback(request: Request, db: Session = Depends(get_db)):
+async def login_callback(request: Request, db: Session = Depends(get_db)):
+    login_kind = request.session.pop("oidc_login_kind", "staff")
+    login_path = "/student/login" if login_kind == "student" else "/auth/login"
     try:
         token = await oauth.omra_is.authorize_access_token(request)
     except OAuthError:
-        return _login_redirect("/auth/login", "Сессия входа истекла. Попробуйте снова.")
+        return _login_redirect(login_path, "Сессия входа истекла. Попробуйте снова.")
     claims = dict(token.get("userinfo") or {})
     if not claims.get("sub") or not claims.get("email"):
         try:
             claims.update(dict(await oauth.omra_is.userinfo(token=token) or {}))
         except Exception:
-            return _login_redirect("/auth/login", "omra.is не вернул идентификатор пользователя.")
+            return _login_redirect(login_path, "omra.is не вернул данные пользователя.")
 
-    subject = str(claims.get("sub") or "")
-    email = str(claims.get("email") or "").strip().lower()
-    identity = db.query(StaffIdentity).filter(StaffIdentity.oidc_sub == subject).first()
-    member = db.get(TeamMember, identity.team_member_id) if identity is not None else None
+    identity = _oidc_identity(claims)
     if identity is None:
+        return _login_redirect(login_path, "omra.is не вернул организацию пользователя.")
+    subject, email, org_id = identity
+    set_tenant(db, org_id)
+
+    if login_kind == "student":
+        student = db.query(Student).filter(Student.oidc_sub == subject).first()
+        if student is None:
+            student = db.query(Student).filter(func.lower(Student.email) == email).first()
+            if student is not None and student.oidc_sub not in {None, subject}:
+                student = None
+        if student is None or student.status.value != "active":
+            db.rollback()
+            return templates.TemplateResponse(
+                "auth/student_denied.html",
+                _auth_context(request, email=email),
+                status_code=403,
+            )
+        if student.oidc_sub is None:
+            student.oidc_sub = subject
+        db.commit()
+        start_session(
+            request,
+            kind="student",
+            account_id=student.id,
+            org_id=org_id,
+        )
+        return RedirectResponse("/student", status_code=303)
+
+    member = db.query(TeamMember).filter(TeamMember.oidc_sub == subject).first()
+    if member is None:
         member = db.query(TeamMember).filter(func.lower(TeamMember.email) == email).first()
-        if member is not None:
-            identity = StaffIdentity(team_member_id=member.id, oidc_sub=subject)
-            db.add(identity)
+        if member is not None and member.oidc_sub not in {None, subject}:
+            member = None
     if member is None or not member.is_active:
         db.rollback()
         return templates.TemplateResponse(
@@ -139,9 +191,10 @@ async def staff_login_callback(request: Request, db: Session = Depends(get_db)):
             _auth_context(request, email=email),
             status_code=403,
         )
-    identity.last_login_at = datetime.now(timezone.utc)
+    if member.oidc_sub is None:
+        member.oidc_sub = subject
     db.commit()
-    start_session(request, kind="staff", account_id=member.id)
+    start_session(request, kind="staff", account_id=member.id, org_id=org_id)
     return RedirectResponse("/", status_code=303)
 
 
@@ -156,7 +209,12 @@ def staff_dev_login(
     member = db.get(TeamMember, member_id)
     if member is None or not member.is_active:
         return _login_redirect("/auth/login", "Участник команды недоступен.")
-    start_session(request, kind="staff", account_id=member.id)
+    start_session(
+        request,
+        kind="staff",
+        account_id=member.id,
+        org_id=member.org_id,
+    )
     return RedirectResponse("/", status_code=303)
 
 
@@ -166,92 +224,18 @@ def staff_logout(request: Request) -> RedirectResponse:
     return RedirectResponse("/auth/login", status_code=303)
 
 
-@router.get("/student/register")
-def student_register_page(request: Request, error: str = "") -> Response:
-    if getattr(request.state, "principal", None) and request.state.principal["kind"] == "student":
-        return RedirectResponse("/student", status_code=303)
-    return templates.TemplateResponse(
-        "auth/student_register.html",
-        _auth_context(request, error=error[:500]),
-    )
-
-
-@router.post("/student/register")
-def student_register(
-    request: Request,
-    name: str = Form(""),
-    email: str = Form(""),
-    password: str = Form(""),
-    password_confirm: str = Form(""),
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    clean_name = name.strip()
-    clean_email = email.strip().lower()
-    if not clean_name or len(clean_name) > 120:
-        return _login_redirect("/student/register", "Введите имя короче 120 символов.")
-    if len(clean_email) > 320 or not _EMAIL_RE.fullmatch(clean_email):
-        return _login_redirect("/student/register", "Введите корректный email.")
-    if len(password) < 10 or len(password) > 128:
-        return _login_redirect("/student/register", "Пароль должен содержать от 10 до 128 символов.")
-    if password != password_confirm:
-        return _login_redirect("/student/register", "Пароли не совпадают.")
-    if db.query(StudentAccount).filter(func.lower(StudentAccount.email) == clean_email).first():
-        return _login_redirect("/student/login", "Аккаунт с таким email уже существует.")
-    existing_student = db.query(Student).filter(func.lower(Student.email) == clean_email).first()
-    if existing_student is not None:
-        return _login_redirect(
-            "/student/register",
-            "Этот email уже указан в карточке ученика. Попросите тренера выдать доступ.",
-        )
-
-    student = Student(name=clean_name, email=clean_email, status=StudentStatus.active)
-    db.add(student)
-    db.flush()
-    account = StudentAccount(
-        student_id=student.id,
-        email=clean_email,
-        password_hash=hash_password(password),
-        last_login_at=datetime.now(timezone.utc),
-    )
-    db.add(account)
-    try:
-        db.commit()
-        db.refresh(account)
-    except IntegrityError:
-        db.rollback()
-        return _login_redirect("/student/login", "Аккаунт с таким email уже существует.")
-    start_session(request, kind="student", account_id=account.id)
-    return RedirectResponse("/student", status_code=303)
-
-
 @router.get("/student/login")
 def student_login_page(request: Request, error: str = "") -> Response:
     if getattr(request.state, "principal", None) and request.state.principal["kind"] == "student":
         return RedirectResponse("/student", status_code=303)
     return templates.TemplateResponse(
         "auth/student_login.html",
-        _auth_context(request, error=error[:500]),
+        _auth_context(
+            request,
+            error=error[:500],
+            oidc_configured=oidc_configured(),
+        ),
     )
-
-
-@router.post("/student/login")
-def student_login(
-    request: Request,
-    email: str = Form(""),
-    password: str = Form(""),
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    clean_email = email.strip().lower()
-    account = db.query(StudentAccount).filter(StudentAccount.email == clean_email).first()
-    if account is None or not verify_password(account.password_hash, password):
-        return _login_redirect("/student/login", "Неверный email или пароль.")
-    student = db.get(Student, account.student_id)
-    if student is None or student.status != StudentStatus.active:
-        return _login_redirect("/student/login", "Аккаунт отключён. Обратитесь к тренеру.")
-    account.last_login_at = datetime.now(timezone.utc)
-    db.commit()
-    start_session(request, kind="student", account_id=account.id)
-    return RedirectResponse("/student", status_code=303)
 
 
 @router.post("/student/logout")

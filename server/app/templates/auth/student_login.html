@@ -1,7 +1,17 @@
 {% extends "auth/layout.html" %}
 {% block title %}Вход ученика · CV Fitness{% endblock %}
 {% block content %}
-<div><h1 class="text-xl font-semibold">Вход ученика</h1><p class="mt-1 text-sm text-slate-400">Тренировки, оценки и рекомендации тренера.</p></div>
-<form action="/student/login" method="post" class="mt-6 space-y-4"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label class="block text-xs text-slate-400">Email<input name="email" type="email" autocomplete="email" required class="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50"></label><label class="block text-xs text-slate-400">Пароль<input name="password" type="password" autocomplete="current-password" required class="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-violet-500/50"></label><button class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500"><i data-lucide="log-in" class="w-4 h-4"></i>Войти</button></form>
-<p class="mt-5 text-center text-xs text-slate-500">Нет аккаунта? <a href="/student/register" class="text-violet-400 hover:text-violet-300">Зарегистрироваться</a></p><p class="mt-2 text-center text-xs text-slate-600"><a href="/auth/login" class="hover:text-slate-400">Вход для команды</a></p>
+<div>
+  <h1 class="text-xl font-semibold">Вход ученика</h1>
+  <p class="mt-1 text-sm text-slate-400">Тренировки, оценки и рекомендации тренера.</p>
+</div>
+{% if oidc_configured %}
+<a href="/student/auth/start" class="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500">
+  <i data-lucide="log-in" class="w-4 h-4"></i>Войти через omra.is
+</a>
+{% else %}
+<div class="mt-6 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">Вход через omra.is ещё не настроен.</div>
+{% endif %}
+<p class="mt-5 text-center text-xs text-slate-500">Тренер должен сначала добавить ваш email в список учеников.</p>
+<p class="mt-2 text-center text-xs text-slate-600"><a href="/auth/login" class="hover:text-slate-400">Вход для команды</a></p>
 {% endblock %}

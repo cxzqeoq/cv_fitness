@@ -15,7 +15,7 @@ import cv2
 import mediapipe as mp
 
 from ..config import TRACKS_DIR, THUMBS_DIR
-from ..db import SessionLocal
+from ..db import SessionLocal, set_tenant
 from ..models import Video, Segment, VideoStatus
 from ..settings_store import get_app_settings
 from . import signature as sig
@@ -164,6 +164,7 @@ def _process_video(video_id: int) -> None:
         video = db.get(Video, video_id)
         if video is None or video.status not in (VideoStatus.pending, VideoStatus.processing):
             return
+        set_tenant(db, video.org_id)
         video.status = VideoStatus.processing
         video.error = None
         db.commit()

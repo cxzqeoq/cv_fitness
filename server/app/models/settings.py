@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, Text
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, Text, UniqueConstraint, Uuid
 from sqlalchemy.sql import func
 
 from ..db import Base
@@ -11,8 +11,11 @@ DEFAULT_AI_PROMPT = (
 
 class AppSettings(Base):
     __tablename__ = "app_settings"
+    __table_args__ = (UniqueConstraint("org_id", name="uq_app_settings_org"),)
 
-    id = Column(Integer, primary_key=True, default=1)
+    org_id = Column(Uuid(as_uuid=True), nullable=False, index=True)
+
+    id = Column(Integer, primary_key=True)
     max_upload_bytes = Column(BigInteger, nullable=False, default=5 * 1024**3)
     target_sample_fps = Column(Integer, nullable=False, default=12)
     pose_model_complexity = Column(Integer, nullable=False, default=1)

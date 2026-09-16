@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, Enum, Uuid
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -16,6 +16,7 @@ class VideoStatus(str, enum.Enum):
 
 class Video(Base):
     __tablename__ = "videos"
+    org_id = Column(Uuid(as_uuid=True), nullable=False, index=True)
 
     id = Column(Integer, primary_key=True)
     filename = Column(String, nullable=False)

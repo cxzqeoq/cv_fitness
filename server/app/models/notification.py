@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, DateTime, Enum, Index, Integer, String, Text
+from sqlalchemy import Column, DateTime, Enum, Index, Integer, String, Text, Uuid
 from sqlalchemy.sql import func
 
 from ..db import Base
@@ -23,13 +23,15 @@ class Notification(Base):
     __tablename__ = "notifications"
     __table_args__ = (
         Index(
-            "ix_notifications_recipient_unread",
+            "ix_notifications_org_recipient_unread",
+            "org_id",
             "recipient_kind",
             "recipient_id",
             "read_at",
         ),
     )
 
+    org_id = Column(Uuid(as_uuid=True), nullable=False, index=True)
     id = Column(Integer, primary_key=True)
     recipient_kind = Column(Enum(NotificationRecipient), nullable=False)
     recipient_id = Column(Integer, nullable=False)

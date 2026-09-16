@@ -1,0 +1,10 @@
+{% extends "auth/layout.html" %}
+{% block title %}Нет доступа · CV Fitness{% endblock %}
+{% block content %}
+<div class="text-center">
+  <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10 text-red-300"><i data-lucide="shield-x" class="h-5 w-5"></i></div>
+  <h1 class="mt-4 text-xl font-semibold">Нет доступа к тренировкам</h1>
+  <p class="mt-2 text-sm text-slate-400">Аккаунт {{ email or 'omra.is' }} не добавлен в список учеников этой организации. Обратитесь к тренеру.</p>
+</div>
+<a href="/student/login" class="mt-6 w-full inline-flex items-center justify-center rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium hover:bg-white/5">Вернуться ко входу</a>
+{% endblock %}

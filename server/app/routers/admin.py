@@ -485,7 +485,7 @@ def public_watch(token: str, request: Request, db: Session = Depends(get_db)):
     video = db.get(Video, publication.video_id) if publication is not None else None
     if video is None or video.status != VideoStatus.done:
         raise HTTPException(404, "published video not found")
-    settings = get_app_settings(db)
+    settings = get_app_settings(db, video.org_id)
     assessment, assessment_average = _final_assessment(db, video.id)
     return templates.TemplateResponse(
         "watch.html",

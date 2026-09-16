@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..config import BASE_DIR
 from ..db import get_db
-from ..models import AuditEvent, Student, StudentAccount, TeamMember, TeamRole
+from ..models import AuditEvent, Student, TeamMember, TeamRole
 
 router = APIRouter(prefix="/team")
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
@@ -85,8 +85,7 @@ def team_list(
             member = db.get(TeamMember, int(event.actor_id))
             actor_labels[event.id] = member.name if member is not None else f"Сотрудник #{event.actor_id}"
         elif event.actor_kind == "student":
-            account = db.get(StudentAccount, int(event.actor_id))
-            student = db.get(Student, account.student_id) if account is not None else None
+            student = db.get(Student, int(event.actor_id))
             actor_labels[event.id] = student.name if student is not None else f"Ученик #{event.actor_id}"
         else:
             actor_labels[event.id] = event.actor_kind

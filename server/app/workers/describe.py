@@ -14,8 +14,8 @@ import re
 import urllib.request
 
 from ..config import THUMBS_DIR
-from ..db import SessionLocal
-from ..models import Segment
+from ..db import SessionLocal, set_tenant
+from ..models import Segment, Video
 from ..settings_store import get_app_settings
 
 DSN_RE = re.compile(r"^openai://([^@]+)@openrouter\.ai/api/v1/(.+)$")
@@ -62,6 +62,10 @@ def describe_video(video_id: int) -> dict:
     db = SessionLocal()
     result = {"done": 0, "skipped": 0, "failed": []}
     try:
+        video = db.get(Video, video_id)
+        if video is None:
+            raise ValueError("video not found")
+        set_tenant(db, video.org_id)
         settings = get_app_settings(db)
         segments = (
             db.query(Segment)

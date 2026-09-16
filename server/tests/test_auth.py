@@ -1,22 +1,54 @@
 import unittest
+import uuid
+from types import SimpleNamespace
 
 from app.auth import (
     _csrf_from_body,
     _oidc_metadata,
-    hash_password,
     staff_access_allowed,
-    verify_password,
+    start_session,
 )
+from app.routers.auth import _oidc_identity
 
 
-class PasswordTests(unittest.TestCase):
-    def test_argon2_hash_roundtrip_and_wrong_password(self):
-        password_hash = hash_password("correct horse battery staple")
+class SessionTests(unittest.TestCase):
+    def test_session_keeps_tenant_with_local_principal(self):
+        request = SimpleNamespace(session={"stale": True})
+        org_id = uuid.uuid4()
 
-        self.assertTrue(password_hash.startswith("$argon2id$"))
-        self.assertNotIn("correct horse", password_hash)
-        self.assertTrue(verify_password(password_hash, "correct horse battery staple"))
-        self.assertFalse(verify_password(password_hash, "wrong password"))
+        start_session(request, kind="student", account_id=42, org_id=org_id)
+
+        self.assertEqual(
+            request.session["principal"],
+            {"kind": "student", "account_id": 42, "org_id": str(org_id)},
+        )
+        self.assertNotIn("stale", request.session)
+
+
+class OidcIdentityTests(unittest.TestCase):
+    def test_requires_subject_email_and_active_organization_membership(self):
+        org_id = uuid.uuid4()
+        self.assertEqual(
+            _oidc_identity(
+                {
+                    "sub": "user-1",
+                    "email": "USER@example.com",
+                    "email_verified": True,
+                    "org_id": str(org_id),
+                    "org_role": "member",
+                }
+            ),
+            ("user-1", "user@example.com", org_id),
+        )
+        self.assertIsNone(
+            _oidc_identity(
+                {
+                    "sub": "user-1",
+                    "email": "user@example.com",
+                    "org_id": str(org_id),
+                }
+            )
+        )
 
 
 class StaffAccessTests(unittest.TestCase):
