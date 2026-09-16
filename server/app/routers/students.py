@@ -6,13 +6,15 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..assignment_workflow import review_submission, submission_for_video
+from ..config import BASE_DIR, PUBLIC_BASE_URL
+from ..crm_integration import enqueue_assignment_message, enqueue_crm_message
 from ..notification_service import notify_student
 from ..program_workflow import refresh_enrollment
 
-from ..config import BASE_DIR
 from ..db import get_db
 from ..models import (
     Assignment,
@@ -231,6 +233,7 @@ def create_assignment(
     )
     db.add(assignment)
     db.flush()
+    enqueue_assignment_message(db, assignment)
     notify_student(
         db,
         student_id=student.id,
@@ -359,6 +362,34 @@ def review_video_assignment(
         return _redirect(student_id=assignment.student_id, error=str(exc))
     if action in {"complete", "reopen"} and assignment.enrollment is not None:
         refresh_enrollment(db, assignment.enrollment)
+    student = db.get(Student, assignment.student_id)
+    if action == "complete" and previous_status != AssignmentStatus.completed:
+        enqueue_crm_message(
+            db,
+            org_id=assignment.org_id,
+            crm_lead_id=student.crm_lead_id,
+            student_id=student.id,
+            event_type="assignment.accepted",
+            event_key=f"assignment.accepted:{submission.id}",
+            text=(
+                f"Работа по «{assignment.title}» принята. "
+                f"Открыть результат: {PUBLIC_BASE_URL}/student/assignments/{assignment.id}"
+            ),
+        )
+    elif action == "reopen":
+        enqueue_crm_message(
+            db,
+            org_id=assignment.org_id,
+            crm_lead_id=student.crm_lead_id,
+            student_id=student.id,
+            event_type="assignment.revision_requested",
+            event_key=f"assignment.revision_requested:{submission.id}:{submission.reviewed_at.isoformat()}",
+            text=(
+                f"Нужен повтор по «{assignment.title}». "
+                f"Комментарий тренера: {submission.coach_comment or 'загрузите новую попытку'}. "
+                f"{PUBLIC_BASE_URL}/student/assignments/{assignment.id}"
+            ),
+        )
     event = None
     title = ""
     body = ""
@@ -467,6 +498,7 @@ def update_student(
     email: str = Form(""),
     birth_date: str = Form(""),
     notes: str = Form(""),
+    crm_lead_id: str = Form(""),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     student = db.get(Student, student_id)
@@ -475,8 +507,23 @@ def update_student(
     validated = _validated_student(name, phone, email, birth_date, notes)
     if isinstance(validated, str):
         return _redirect(student_id=student_id, error=validated)
+    clean_crm_lead_id = crm_lead_id.strip()
+    try:
+        parsed_crm_lead_id = int(clean_crm_lead_id) if clean_crm_lead_id else None
+    except ValueError:
+        return _redirect(student_id=student_id, error="CRM lead ID должен быть числом.")
+    if parsed_crm_lead_id is not None and parsed_crm_lead_id <= 0:
+        return _redirect(student_id=student_id, error="CRM lead ID должен быть положительным.")
     student.name, student.phone, student.email, student.birth_date, student.notes = validated
-    db.commit()
+    student.crm_lead_id = parsed_crm_lead_id
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return _redirect(
+            student_id=student_id,
+            error="Этот CRM lead уже связан с другим учеником.",
+        )
     return _redirect(student_id=student_id, notice="Карточка ученика сохранена.")
 
 

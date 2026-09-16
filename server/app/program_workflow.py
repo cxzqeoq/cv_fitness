@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+from .crm_integration import enqueue_assignment_message
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -151,6 +152,7 @@ def refresh_enrollment(
         if previous_required_complete and date_open:
             for assignment, _item in lesson_rows:
                 if assignment.status == AssignmentStatus.locked:
+                    enqueue_assignment_message(db, assignment)
                     assignment.status = AssignmentStatus.assigned
         required = [assignment for assignment, item in lesson_rows if item.is_required]
         previous_required_complete = previous_required_complete and all(

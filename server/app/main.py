@@ -8,10 +8,12 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import AuthMiddleware
 from .config import BASE_DIR, ENVIRONMENT, SESSION_SECRET
+from .crm_integration import run_crm_outbox_worker
 from .routers import (
     admin,
     api,
     assessments,
+    crm,
     auth,
     exercises,
     notifications,
@@ -35,6 +37,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         daemon=True,
     )
     recovery.start()
+    outbox = Thread(
+        target=run_crm_outbox_worker,
+        name="crm-outbox",
+        daemon=True,
+    )
+    outbox.start()
     yield
 
 app = FastAPI(title="CV Fitness Admin", lifespan=lifespan)
@@ -53,6 +61,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(crm.router)
 app.include_router(assessments.router)
 app.include_router(exercises.router)
 app.include_router(programs.router)

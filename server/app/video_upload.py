@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterable
 import json
 import subprocess
 import uuid
@@ -42,11 +43,15 @@ def format_size_limit(size: int) -> str:
     return f"{size / 1024**2:g} МБ"
 
 
-async def save_video_upload(file: UploadFile, max_upload_bytes: int) -> tuple[Path, str]:
-    original_name = Path(file.filename or "").name
-    if not original_name:
-        raise HTTPException(400, "Выберите видеофайл.")
-    ext = Path(original_name).suffix.lower()
+async def save_video_chunks(
+    chunks: AsyncIterable[bytes],
+    original_name: str,
+    max_upload_bytes: int,
+) -> tuple[Path, str]:
+    safe_name = Path(original_name).name
+    if not safe_name:
+        raise HTTPException(400, "Не удалось определить имя видеофайла.")
+    ext = Path(safe_name).suffix.lower()
     if ext not in ALLOWED_VIDEO_EXTENSIONS:
         raise HTTPException(415, "Поддерживаются MP4, MOV, M4V и WebM.")
 
@@ -54,7 +59,7 @@ async def save_video_upload(file: UploadFile, max_upload_bytes: int) -> tuple[Pa
     size = 0
     try:
         with destination.open("xb") as output:
-            while chunk := await file.read(UPLOAD_CHUNK_BYTES):
+            async for chunk in chunks:
                 size += len(chunk)
                 if size > max_upload_bytes:
                     limit = format_size_limit(max_upload_bytes)
@@ -66,6 +71,20 @@ async def save_video_upload(file: UploadFile, max_upload_bytes: int) -> tuple[Pa
     except Exception:
         destination.unlink(missing_ok=True)
         raise
+    return destination, safe_name
+
+
+async def _upload_chunks(file: UploadFile) -> AsyncIterable[bytes]:
+    while chunk := await file.read(UPLOAD_CHUNK_BYTES):
+        yield chunk
+
+
+async def save_video_upload(file: UploadFile, max_upload_bytes: int) -> tuple[Path, str]:
+    try:
+        return await save_video_chunks(
+            _upload_chunks(file),
+            file.filename or "",
+            max_upload_bytes,
+        )
     finally:
         await file.close()
-    return destination, original_name

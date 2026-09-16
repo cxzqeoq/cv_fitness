@@ -299,6 +299,13 @@ tenant scope доказан smoke-сценарием с двумя органи�
 **Результат:** ученик получает задание и отправляет видео в Telegram/WhatsApp, не меняя привычный
 канал общения.
 
+**Статус:** реализация завершена 2026-09-16. Подписанный `message.in` проходит через
+company-scoped attachment endpoint, создаёт ровно одну попытку, запускает pipeline и доставляет
+результат через persistent outbox; повтор события, outage/retry и cross-tenant подмена доказаны
+на локальном cross-service smoke. Веха реального Telegram-диалога заблокирована окружением:
+локальные `telegram_user` agents имеют пустой config и невалидные session keys, рабочего
+Telegram bot/user agent нет.
+
 ### Сделать в `omra.crm`
 
 - Добавить company-scoped команду отправки по `lead_id`, чтобы Fitness не хранил

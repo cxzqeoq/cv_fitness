@@ -1,6 +1,5 @@
 import uuid
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .models import AppSettings
@@ -26,17 +25,5 @@ def get_app_settings(
 
     settings = AppSettings(org_id=target_org)
     db.add(settings)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        settings = (
-            db.query(AppSettings)
-            .filter(AppSettings.org_id == target_org)
-            .first()
-        )
-        if settings is None:
-            raise
-        return settings
-    db.refresh(settings)
+    db.flush()
     return settings

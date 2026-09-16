@@ -15,8 +15,9 @@ import cv2
 import mediapipe as mp
 
 from ..config import TRACKS_DIR, THUMBS_DIR
+from ..crm_integration import enqueue_crm_message
 from ..db import SessionLocal, set_tenant
-from ..models import Video, Segment, VideoStatus
+from ..models import Segment, Student, Submission, Video, VideoStatus
 from ..settings_store import get_app_settings
 from . import signature as sig
 
@@ -193,6 +194,25 @@ def _process_video(video_id: int) -> None:
         video.fps = fps
         video.track_path = str(track_path.relative_to(TRACKS_DIR.parent))
         video.status = VideoStatus.done
+        submission = (
+            db.query(Submission)
+            .filter(Submission.video_id == video.id)
+            .one_or_none()
+        )
+        if submission is not None:
+            assignment = submission.assignment
+            student = db.get(Student, assignment.student_id)
+            enqueue_crm_message(
+                db,
+                org_id=video.org_id,
+                crm_lead_id=student.crm_lead_id,
+                student_id=student.id,
+                event_type="video.processed",
+                event_key=f"video.processed:{video.id}",
+                text=(
+                    f"Видео по «{assignment.title}» обработано и передано тренеру."
+                ),
+            )
         db.commit()
     except Exception as exc:  # noqa: BLE001 - surface every pipeline failure to admin UI
         db.rollback()

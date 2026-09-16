@@ -5,11 +5,12 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import BASE_DIR, STORAGE_DIR
 from ..db import get_db
-from ..models import Video, VideoPublication
+from ..models import CrmOrganizationBinding, Video, VideoPublication
 from ..settings_store import get_app_settings
 
 router = APIRouter(prefix="/settings")
@@ -62,6 +63,7 @@ def settings_page(
     db: Session = Depends(get_db),
 ) -> Response:
     settings = get_app_settings(db)
+    crm_binding = db.query(CrmOrganizationBinding).one_or_none()
     return templates.TemplateResponse(
         "admin/settings.html",
         {
@@ -73,6 +75,7 @@ def settings_page(
             "video_count": db.query(Video).count(),
             "publication_count": db.query(VideoPublication).count(),
             "ai_model": _openrouter_model(),
+            "crm_binding": crm_binding,
             "error": error[:500],
             "notice": notice[:500],
         },
@@ -86,6 +89,8 @@ def update_settings(
     pose_model_complexity: int = Form(...),
     ai_prompt: str = Form(""),
     show_skeleton: str | None = Form(None),
+    crm_company_id: int = Form(0),
+    crm_api_key: str = Form(""),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     prompt = ai_prompt.strip()
@@ -97,6 +102,8 @@ def update_settings(
         return _redirect(error="Выберите допустимую точность модели.")
     if not 20 <= len(prompt) <= 2000:
         return _redirect(error="Инструкция для AI должна содержать от 20 до 2000 символов.")
+    if crm_company_id < 0:
+        return _redirect(error="CRM company ID должен быть положительным числом.")
 
     settings = get_app_settings(db)
     settings.max_upload_bytes = round(max_upload_gb * 1024**3)
@@ -104,5 +111,26 @@ def update_settings(
     settings.pose_model_complexity = pose_model_complexity
     settings.ai_prompt = prompt
     settings.show_skeleton = show_skeleton == "on"
-    db.commit()
+    binding = db.query(CrmOrganizationBinding).one_or_none()
+    clean_api_key = crm_api_key.strip()
+    if crm_company_id:
+        if binding is None:
+            if not clean_api_key:
+                return _redirect(error="Укажите company-scoped API key omra.crm.")
+            binding = CrmOrganizationBinding(
+                crm_company_id=crm_company_id,
+                api_key=clean_api_key,
+            )
+            db.add(binding)
+        else:
+            binding.crm_company_id = crm_company_id
+            if clean_api_key:
+                binding.api_key = clean_api_key
+    elif binding is not None:
+        db.delete(binding)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return _redirect(error="Эта CRM-компания уже связана с другой организацией.")
     return _redirect(notice="Настройки сохранены.")

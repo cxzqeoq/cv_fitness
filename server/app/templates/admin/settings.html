@@ -101,6 +101,29 @@
 
   <section class="rounded-lg border border-slate-200 bg-white">
     <div class="px-5 py-4 border-b border-slate-100">
+      <h2 class="text-sm font-semibold text-slate-800">omra.crm</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Связь организации и company-scoped ключ для доставки заданий в чат.</p>
+    </div>
+    <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <label class="text-xs text-slate-500">
+        CRM company ID
+        <input name="crm_company_id" type="number" min="0" step="1"
+               value="{{ crm_binding.crm_company_id if crm_binding else 0 }}"
+               class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+        <span class="block mt-1 text-[11px] text-slate-400">0 отключает интеграцию для этой организации.</span>
+      </label>
+      <label class="text-xs text-slate-500">
+        Company-scoped API key
+        <input name="crm_api_key" type="password" autocomplete="new-password"
+               placeholder="{{ 'Ключ сохранён — оставьте пустым' if crm_binding else 'Вставьте ключ omra.crm' }}"
+               class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+        <span class="block mt-1 text-[11px] text-slate-400">Значение не показывается повторно.</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white">
+    <div class="px-5 py-4 border-b border-slate-100">
       <h2 class="text-sm font-semibold text-slate-800">Публичный плеер</h2>
     </div>
     <div class="p-5">

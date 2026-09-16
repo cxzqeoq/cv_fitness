@@ -1,6 +1,13 @@
 from .assessment import AssessmentStatus, SegmentAssessment, VideoAssessment
 from .assignment import Assignment, AssignmentStatus, Submission, SubmissionStatus
 from .auth import AuditEvent
+from .crm import (
+    CrmInboundEvent,
+    CrmInboxStatus,
+    CrmOrganizationBinding,
+    CrmOutboxEvent,
+    CrmOutboxStatus,
+)
 from .exercise import Exercise, ExerciseStatus, SegmentComparison, SegmentExercise
 from .notification import Notification, NotificationEvent, NotificationRecipient
 from .publication import VideoPublication
@@ -25,6 +32,11 @@ __all__ = [
     "AssignmentStatus",
     "Submission",
     "SubmissionStatus",
+    "CrmInboundEvent",
+    "CrmInboxStatus",
+    "CrmOrganizationBinding",
+    "CrmOutboxEvent",
+    "CrmOutboxStatus",
     "DEFAULT_AI_PROMPT",
     "Enrollment",
     "EnrollmentStatus",

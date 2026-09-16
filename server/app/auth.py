@@ -121,6 +121,7 @@ def _is_public(path: str) -> bool:
         or path == "/auth/start"
         or path == "/auth/callback"
         or path == "/auth/dev"
+        or path == "/api/integrations/crm/webhook"
         or path == "/student/login"
         or path == "/student/auth/start"
         or path.startswith("/watch/")
@@ -188,7 +189,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     return _forbidden(path)
         request.state.principal = principal
 
-        if request.method not in SAFE_METHODS:
+        if (
+            request.method not in SAFE_METHODS
+            and path != "/api/integrations/crm/webhook"
+        ):
             submitted = request.headers.get("X-CSRF-Token", "")
             if not submitted:
                 body = await request.body()

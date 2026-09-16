@@ -18,6 +18,7 @@ class Student(Base):
     __table_args__ = (
         UniqueConstraint("org_id", "email", name="uq_students_org_email"),
         UniqueConstraint("org_id", "oidc_sub", name="uq_students_org_oidc_sub"),
+        UniqueConstraint("org_id", "crm_lead_id", name="uq_students_org_crm_lead"),
     )
 
     org_id = Column(Uuid(as_uuid=True), nullable=False, index=True)
@@ -28,6 +29,7 @@ class Student(Base):
     email = Column(String(320), nullable=True)
     birth_date = Column(Date, nullable=True)
     oidc_sub = Column(String(200), nullable=True)
+    crm_lead_id = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
     status = Column(Enum(StudentStatus), nullable=False, default=StudentStatus.active, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
