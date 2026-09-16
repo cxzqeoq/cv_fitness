@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Base, TenantSession, set_tenant
-from app.models import Exercise, Student, TeamMember, TeamRole, Video
+from app.models import Exercise, Program, Student, TeamMember, TeamRole, Video
 
 
 class TenantScopeTests(unittest.TestCase):
@@ -36,6 +36,8 @@ class TenantScopeTests(unittest.TestCase):
                 Exercise(org_id=self.org_a, name="Squat"),
                 Exercise(org_id=self.org_b, name="Squat"),
                 Video(org_id=self.org_a, filename="a.mp4", original_name="a.mp4"),
+                Program(org_id=self.org_a, title="Starter"),
+                Program(org_id=self.org_b, title="Starter"),
                 Video(org_id=self.org_b, filename="b.mp4", original_name="b.mp4"),
             ]
         )
@@ -53,6 +55,7 @@ class TenantScopeTests(unittest.TestCase):
         self.assertEqual([member.name for member in db.query(TeamMember).all()], ["Owner A"])
         self.assertEqual([video.original_name for video in db.query(Video).all()], ["a.mp4"])
         self.assertEqual([exercise.name for exercise in db.query(Exercise).all()], ["Squat"])
+        self.assertEqual([program.title for program in db.query(Program).all()], ["Starter"])
         self.assertIsNone(db.get(Student, 2))
         db.close()
 
@@ -64,6 +67,10 @@ class TenantScopeTests(unittest.TestCase):
         db.flush()
         self.assertEqual(student.org_id, self.org_a)
 
+        program = Program(title="Scoped plan")
+        db.add(program)
+        db.flush()
+        self.assertEqual(program.org_id, self.org_a)
         db.add(Student(org_id=self.org_b, name="Wrong org"))
         with self.assertRaisesRegex(ValueError, "cross-tenant insert rejected"):
             db.flush()

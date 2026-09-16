@@ -29,6 +29,8 @@ from ..models import (
     AssessmentStatus,
     Assignment,
     AssignmentStatus,
+    Enrollment,
+    EnrollmentStatus,
     NotificationEvent,
     Student,
     Submission,
@@ -39,6 +41,7 @@ from ..models import (
     VideoStatus,
 )
 from ..settings_store import get_app_settings
+from ..program_workflow import refresh_enrollment
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
@@ -261,7 +264,17 @@ def _owned_assignment(
 ) -> tuple[Assignment, Submission | None, Video | None]:
     principal = request.state.principal
     assignment = db.get(Assignment, assignment_id)
-    if assignment is None or assignment.student_id != principal["student_id"]:
+    if (
+        assignment is not None
+        and assignment.status == AssignmentStatus.locked
+        and assignment.enrollment is not None
+    ):
+        refresh_enrollment(db, assignment.enrollment)
+    if (
+        assignment is None
+        or assignment.student_id != principal["student_id"]
+        or assignment.status == AssignmentStatus.locked
+    ):
         raise HTTPException(404, "assignment not found")
     submission = latest_submission(db, assignment.id)
     video = db.get(Video, submission.video_id) if submission is not None else None
@@ -366,10 +379,22 @@ def student_submit_assignment(
 def student_dashboard(request: Request, db: Session = Depends(get_db)) -> Response:
     principal = request.state.principal
     student = db.get(Student, principal["student_id"])
+    active_enrollments = (
+        db.query(Enrollment)
+        .filter(
+            Enrollment.student_id == student.id,
+            Enrollment.status == EnrollmentStatus.active,
+        )
+        .all()
+    )
+    for enrollment in active_enrollments:
+        refresh_enrollment(db, enrollment)
+    if active_enrollments:
+        db.commit()
     assignments = (
         db.query(Assignment)
         .filter(Assignment.student_id == student.id)
-        .order_by(Assignment.due_at.desc().nullslast(), Assignment.created_at.desc())
+        .order_by(Assignment.available_at.asc().nullsfirst(), Assignment.created_at, Assignment.id)
         .all()
     )
     history = []
@@ -398,6 +423,12 @@ def student_dashboard(request: Request, db: Session = Depends(get_db)) -> Respon
                 "video": video,
                 "assessment": final,
                 "average": round(sum(scores) / len(scores), 1) if scores else None,
+                "lesson": assignment.lesson_exercise.lesson
+                if assignment.lesson_exercise is not None
+                else None,
+                "program": assignment.lesson_exercise.lesson.program
+                if assignment.lesson_exercise is not None
+                else None,
             }
         )
     return templates.TemplateResponse(
@@ -407,15 +438,21 @@ def student_dashboard(request: Request, db: Session = Depends(get_db)) -> Respon
             "student": student,
             "principal": principal,
             "history": history,
-            "active_history": [
+            "today_history": [
                 item
                 for item in history
-                if item["assignment"].status.value != "completed"
+                if item["assignment"].status
+                not in (AssignmentStatus.locked, AssignmentStatus.completed)
+            ],
+            "next_history": [
+                item
+                for item in history
+                if item["assignment"].status == AssignmentStatus.locked
             ],
             "completed_history": [
                 item
                 for item in history
-                if item["assignment"].status.value == "completed"
+                if item["assignment"].status == AssignmentStatus.completed
             ],
             "submitted_count": sum(
                 item["assignment"].status.value == "submitted" for item in history

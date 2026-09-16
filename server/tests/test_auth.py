@@ -60,6 +60,9 @@ class StaffAccessTests(unittest.TestCase):
         self.assertTrue(staff_access_allowed("/1/segments/2", "POST", "editor"))
         self.assertFalse(staff_access_allowed("/1/delete", "POST", "manager"))
         self.assertFalse(staff_access_allowed("/1/publish", "POST", "editor"))
+        self.assertTrue(staff_access_allowed("/programs/1", "POST", "editor"))
+        self.assertFalse(staff_access_allowed("/programs/1/enroll", "POST", "editor"))
+        self.assertTrue(staff_access_allowed("/programs/1/enroll", "POST", "manager"))
 
 
 class OidcMetadataTests(unittest.TestCase):

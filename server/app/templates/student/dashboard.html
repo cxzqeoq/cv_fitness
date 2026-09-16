@@ -34,9 +34,9 @@
 <main class="mx-auto max-w-5xl px-4 py-7 sm:px-6 sm:py-10">
   <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
     <div>
-      <p class="text-xs font-medium uppercase tracking-wide text-violet-400">Личный кабинет</p>
+      <p class="text-xs font-medium uppercase tracking-wide text-violet-400">Учебный план</p>
       <h1 class="mt-1 text-2xl font-semibold">Здравствуйте, {{ student.name.split()[0] }}</h1>
-      <p class="mt-1 text-sm text-slate-400">Начинайте назначенные тренировки, отправляйте результат и получайте ответ тренера.</p>
+      <p class="mt-1 text-sm text-slate-400">Сегодняшние задания открываются по расписанию и после завершения предыдущих уроков.</p>
     </div>
     <a href="/student/progress" class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-300 hover:bg-violet-500/15">
       <i data-lucide="chart-no-axes-column-increasing" class="h-4 w-4"></i>Мой прогресс
@@ -44,13 +44,13 @@
   </div>
 
   <div class="mt-7 grid max-w-2xl grid-cols-3 gap-3">
-    <div class="rounded-xl border border-white/10 bg-slate-900 p-4">
-      <p class="text-xs text-slate-500">В работе</p>
-      <p class="mt-1 text-2xl font-semibold">{{ active_history|length }}</p>
+    <div class="rounded-xl border border-violet-400/20 bg-slate-900 p-4">
+      <p class="text-xs text-slate-500">Сегодня</p>
+      <p class="mt-1 text-2xl font-semibold text-violet-300">{{ today_history|length }}</p>
     </div>
     <div class="rounded-xl border border-white/10 bg-slate-900 p-4">
-      <p class="text-xs text-slate-500">На проверке</p>
-      <p class="mt-1 text-2xl font-semibold text-amber-300">{{ submitted_count }}</p>
+      <p class="text-xs text-slate-500">Далее</p>
+      <p class="mt-1 text-2xl font-semibold">{{ next_history|length }}</p>
     </div>
     <div class="rounded-xl border border-white/10 bg-slate-900 p-4">
       <p class="text-xs text-slate-500">Завершено</p>
@@ -59,23 +59,22 @@
   </div>
 
   <section class="mt-8">
-    <div class="flex items-end justify-between gap-3">
-      <div>
-        <h2 class="text-sm font-semibold">Текущие тренировки</h2>
-        <p class="mt-0.5 text-xs text-slate-500">Откройте карточку, чтобы начать или отправить результат.</p>
-      </div>
+    <div>
+      <h2 class="text-sm font-semibold">Сегодня</h2>
+      <p class="mt-0.5 text-xs text-slate-500">Доступные тренировки и результаты на проверке.</p>
     </div>
-    {% if active_history %}
+    {% if today_history %}
     <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {% for item in active_history %}
+      {% for item in today_history %}
       {% set status = item.assignment.status.value %}
       {% set status_label = {'assigned': 'назначено', 'in_progress': 'в работе', 'submitted': 'на проверке', 'revision_requested': 'на доработке'} %}
       {% set status_class = {'assigned': 'bg-slate-800 text-slate-300', 'in_progress': 'bg-violet-400/10 text-violet-300', 'submitted': 'bg-amber-400/10 text-amber-300', 'revision_requested': 'bg-rose-400/10 text-rose-300'} %}
       <a href="/student/assignments/{{ item.assignment.id }}" class="group rounded-xl border border-white/10 bg-slate-900 p-4 transition-colors hover:border-violet-400/30 hover:bg-slate-900/80">
+        {% if item.program %}<p class="mb-2 text-[11px] font-medium uppercase tracking-wide text-violet-400">{{ item.program.title }} · урок {{ item.lesson.position }}</p>{% endif %}
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="truncate font-medium group-hover:text-violet-300">{{ item.assignment.title }}</p>
-            <p class="mt-1 text-xs text-slate-500">{{ item.assignment.due_at.strftime('%d.%m.%Y') if item.assignment.due_at else item.assignment.created_at.strftime('%d.%m.%Y') }}</p>
+            <p class="mt-1 text-xs text-slate-500">{{ item.lesson.title if item.lesson else (item.assignment.due_at.strftime('%d.%m.%Y') if item.assignment.due_at else 'Разовое задание') }}</p>
           </div>
           <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium {{ status_class[status] }}">{{ status_label[status] }}</span>
         </div>
@@ -85,10 +84,8 @@
         <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-rose-300"><i data-lucide="upload" class="h-3.5 w-3.5"></i>Загрузить новую попытку</p>
         {% elif not item.video %}
         <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-300"><i data-lucide="upload" class="h-3.5 w-3.5"></i>Загрузить видео</p>
-        {% elif status == 'assigned' %}
-        <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-300"><i data-lucide="play" class="h-3.5 w-3.5"></i>Начать тренировку</p>
         {% else %}
-        <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-300"><i data-lucide="send" class="h-3.5 w-3.5"></i>Отправить результат</p>
+        <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-300"><i data-lucide="send" class="h-3.5 w-3.5"></i>Продолжить тренировку</p>
         {% endif %}
       </a>
       {% endfor %}
@@ -96,23 +93,49 @@
     {% else %}
     <div class="mt-3 rounded-xl border border-dashed border-white/10 py-10 text-center">
       <i data-lucide="circle-check" class="mx-auto h-7 w-7 text-slate-700"></i>
-      <p class="mt-2 text-sm text-slate-400">Текущих тренировок нет.</p>
+      <p class="mt-2 text-sm text-slate-400">Все доступные задания выполнены.</p>
     </div>
     {% endif %}
   </section>
 
   <section class="mt-9">
     <div>
-      <h2 class="text-sm font-semibold">История</h2>
-      <p class="mt-0.5 text-xs text-slate-500">Завершённые тренировки и обратная связь тренера.</p>
+      <h2 class="text-sm font-semibold">Далее</h2>
+      <p class="mt-0.5 text-xs text-slate-500">Закрытые уроки нельзя открыть до даты и завершения предыдущего шага.</p>
+    </div>
+    {% if next_history %}
+    <div class="mt-3 divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+      {% for item in next_history %}
+      <div class="flex items-center justify-between gap-4 p-4 text-slate-500">
+        <div class="min-w-0">
+          {% if item.program %}<p class="text-[11px] font-medium uppercase tracking-wide text-slate-600">{{ item.program.title }} · урок {{ item.lesson.position }}</p>{% endif %}
+          <p class="mt-1 truncate text-sm font-medium text-slate-400">{{ item.assignment.title }}</p>
+          <p class="mt-1 text-xs">{{ item.lesson.title if item.lesson else 'Следующее задание' }}</p>
+        </div>
+        <div class="flex shrink-0 items-center gap-2 text-xs">
+          {% if item.assignment.available_at %}<span>с {{ item.assignment.available_at.strftime('%d.%m') }}</span>{% endif %}
+          <i data-lucide="lock-keyhole" class="h-4 w-4"></i>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="mt-3 text-sm text-slate-500">Следующих закрытых уроков нет.</p>
+    {% endif %}
+  </section>
+
+  <section class="mt-9">
+    <div>
+      <h2 class="text-sm font-semibold">Завершено</h2>
+      <p class="mt-0.5 text-xs text-slate-500">Принятые тренировки и обратная связь тренера.</p>
     </div>
     {% if completed_history %}
     <div class="mt-3 divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
       {% for item in completed_history %}
       <a href="/student/assignments/{{ item.assignment.id }}" class="flex items-center justify-between gap-4 p-4 hover:bg-white/[0.03]">
         <div class="min-w-0">
-          <p class="truncate text-sm font-medium">{{ item.assignment.title }}</p>
-          <p class="mt-1 text-xs text-slate-500">{{ item.assignment.completed_at.strftime('%d.%m.%Y') if item.assignment.completed_at else item.assignment.created_at.strftime('%d.%m.%Y') }}</p>
+          {% if item.program %}<p class="text-[11px] font-medium uppercase tracking-wide text-slate-600">{{ item.program.title }} · урок {{ item.lesson.position }}</p>{% endif %}
+          <p class="mt-1 truncate text-sm font-medium">{{ item.assignment.title }}</p>
           {% if item.submission and item.submission.coach_comment %}<p class="mt-2 line-clamp-1 text-xs text-slate-400">{{ item.submission.coach_comment }}</p>{% endif %}
         </div>
         <div class="flex shrink-0 items-center gap-3">

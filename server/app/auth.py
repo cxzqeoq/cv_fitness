@@ -98,6 +98,10 @@ def _required_roles(path: str, method: str) -> frozenset[str]:
         return frozenset({TeamRole.owner.value})
     if path.startswith("/students") or path.startswith("/assessments"):
         return frozenset({TeamRole.owner.value, TeamRole.manager.value})
+    if path.startswith("/programs") and method not in SAFE_METHODS and (
+        path.endswith("/enroll") or path.endswith("/archive")
+    ):
+        return frozenset({TeamRole.owner.value, TeamRole.manager.value})
     if method not in SAFE_METHODS and (
         path.endswith("/delete") or path.endswith("/publish") or path.endswith("/unpublish")
     ):

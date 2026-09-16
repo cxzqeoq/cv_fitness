@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..assignment_workflow import review_submission, submission_for_video
 from ..notification_service import notify_student
+from ..program_workflow import refresh_enrollment
 
 from ..config import BASE_DIR
 from ..db import get_db
@@ -356,6 +357,8 @@ def review_video_assignment(
         review_submission(assignment, submission, action, coach_comment)
     except ValueError as exc:
         return _redirect(student_id=assignment.student_id, error=str(exc))
+    if action in {"complete", "reopen"} and assignment.enrollment is not None:
+        refresh_enrollment(db, assignment.enrollment)
     event = None
     title = ""
     body = ""

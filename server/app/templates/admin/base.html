@@ -36,6 +36,10 @@
       Ученики
     </a>
     {% endif %}
+    <a href="/programs" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'programs' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
+      <i data-lucide="notebook-tabs" class="w-4 h-4 shrink-0"></i>
+      Программы
+    </a>
     <a href="/exercises" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'exercises' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
       <i data-lucide="dumbbell" class="w-4 h-4 shrink-0"></i>
       Упражнения
@@ -81,6 +85,8 @@
       {% elif active == "students" %}
       <a href="/students" class="hover:text-slate-900 shrink-0">Ученики</a>
       {% block student_breadcrumb %}{% endblock %}
+      {% elif active == "programs" %}
+      <a href="/programs" class="hover:text-slate-900 shrink-0">Программы</a>
       {% elif active == "exercises" %}
       <span class="text-slate-900 font-medium">Упражнения</span>
       {% elif active == "settings" %}

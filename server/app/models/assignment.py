@@ -20,6 +20,7 @@ from ..db import Base
 
 
 class AssignmentStatus(str, enum.Enum):
+    locked = "locked"
     assigned = "assigned"
     in_progress = "in_progress"
     submitted = "submitted"
@@ -36,6 +37,13 @@ class SubmissionStatus(str, enum.Enum):
 
 class Assignment(Base):
     __tablename__ = "assignments"
+    __table_args__ = (
+        UniqueConstraint(
+            "enrollment_id",
+            "lesson_exercise_id",
+            name="uq_assignments_enrollment_lesson_exercise",
+        ),
+    )
 
     org_id = Column(Uuid(as_uuid=True), nullable=False, index=True)
     id = Column(Integer, primary_key=True)
@@ -51,6 +59,19 @@ class Assignment(Base):
         nullable=True,
         index=True,
     )
+    enrollment_id = Column(
+        Integer,
+        ForeignKey("enrollments.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    lesson_exercise_id = Column(
+        Integer,
+        ForeignKey("lesson_exercises.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    available_at = Column(DateTime(timezone=True), nullable=True, index=True)
     title = Column(String(200), nullable=False)
     due_at = Column(DateTime(timezone=True), nullable=True, index=True)
     status = Column(
@@ -75,6 +96,8 @@ class Assignment(Base):
         cascade="all, delete-orphan",
         order_by="Submission.attempt",
     )
+    enrollment = relationship("Enrollment", back_populates="assignments")
+    lesson_exercise = relationship("LessonExercise")
 
 
 class Submission(Base):

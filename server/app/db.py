@@ -27,13 +27,26 @@ def _tenant_models() -> tuple[type, ...]:
         Assignment,
         AuditEvent,
         Exercise,
+        Enrollment,
         Notification,
         Student,
+        Program,
         TeamMember,
         Video,
     )
 
-    return AppSettings, Assignment, AuditEvent, Exercise, Notification, Student, TeamMember, Video
+    return (
+        AppSettings,
+        Assignment,
+        AuditEvent,
+        Enrollment,
+        Exercise,
+        Notification,
+        Program,
+        Student,
+        TeamMember,
+        Video,
+    )
 
 
 def set_tenant(db: Session, org_id: uuid.UUID | str) -> uuid.UUID:

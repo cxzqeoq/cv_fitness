@@ -60,8 +60,13 @@
           <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Статус тренировки</p>
           <span class="rounded-full px-2 py-0.5 text-[11px] font-medium {{ workflow_class[workflow_status] }}">{{ workflow_label[workflow_status] }}</span>
         </div>
+        {% if assignment.lesson_exercise %}
+        {% set item = assignment.lesson_exercise %}
+        <p class="mt-2 text-[11px] font-medium uppercase tracking-wide text-violet-300">{{ item.lesson.program.title }} · урок {{ item.lesson.position }} · {{ item.lesson.title }}</p>
+        {% endif %}
         <p class="mt-2 text-sm text-slate-300">{{ assignment.title }}</p>
         {% if assignment.due_at %}<p class="mt-0.5 text-xs text-slate-500">До {{ assignment.due_at.strftime("%d.%m.%Y") }}</p>{% endif %}
+        {% if assignment.lesson_exercise and assignment.lesson_exercise.instructions %}<p class="mt-2 max-w-2xl whitespace-pre-line text-xs leading-5 text-slate-400">{{ assignment.lesson_exercise.instructions }}</p>{% endif %}
       </div>
       {% if workflow_status == "assigned" %}
       <form action="/student/assignments/{{ assignment.id }}/start" method="post">

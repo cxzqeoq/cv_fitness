@@ -40,6 +40,8 @@ def next_attempt(db: Session, assignment_id: int) -> int:
 
 def start_assignment(assignment: Assignment, *, now: datetime | None = None) -> None:
     """Move an assigned or returned workout into active work."""
+    if assignment.status == AssignmentStatus.locked:
+        raise ValueError("Этот урок ещё не открыт.")
     if assignment.status == AssignmentStatus.completed:
         raise ValueError("Завершённую тренировку нельзя начать заново без решения тренера.")
     if assignment.status == AssignmentStatus.submitted:

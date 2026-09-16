@@ -8,7 +8,19 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import AuthMiddleware
 from .config import BASE_DIR, ENVIRONMENT, SESSION_SECRET
-from .routers import admin, api, assessments, auth, exercises, notifications, progress, settings, students, team
+from .routers import (
+    admin,
+    api,
+    assessments,
+    auth,
+    exercises,
+    notifications,
+    programs,
+    progress,
+    settings,
+    students,
+    team,
+)
 from .workers.pipeline import resume_interrupted_processing
 
 if ENVIRONMENT != "dev" and SESSION_SECRET == "change-me":
@@ -43,6 +55,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(assessments.router)
 app.include_router(exercises.router)
+app.include_router(programs.router)
 app.include_router(students.router)
 app.include_router(notifications.router)
 app.include_router(progress.router)

@@ -22,6 +22,22 @@
   <h1 class="mt-1 text-2xl font-semibold">{{ assignment.title }}</h1>
   {% if assignment.due_at %}<p class="mt-1 text-sm text-slate-400">Выполнить до {{ assignment.due_at.strftime('%d.%m.%Y') }}</p>{% endif %}
 
+  {% if assignment.lesson_exercise %}
+  {% set item = assignment.lesson_exercise %}
+  {% set lesson = item.lesson %}
+  <section class="mt-5 rounded-xl border border-violet-400/20 bg-violet-500/5 p-5">
+    <p class="text-xs font-medium uppercase tracking-wide text-violet-300">{{ lesson.program.title }} · урок {{ lesson.position }}</p>
+    <h2 class="mt-1 font-semibold text-white">{{ lesson.title }}</h2>
+    {% if lesson.content %}<p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-300">{{ lesson.content }}</p>{% endif %}
+    {% if item.instructions %}<p class="mt-4 whitespace-pre-line border-l-2 border-violet-400 pl-3 text-sm text-slate-200">{{ item.instructions }}</p>{% endif %}
+    <div class="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
+      {% if item.target_sets %}<span class="rounded bg-white/5 px-2 py-1">{{ item.target_sets }} подхода</span>{% endif %}
+      {% if item.target_reps %}<span class="rounded bg-white/5 px-2 py-1">{{ item.target_reps }} повторов</span>{% endif %}
+      {% if item.target_duration_sec %}<span class="rounded bg-white/5 px-2 py-1">{{ item.target_duration_sec }} сек</span>{% endif %}
+    </div>
+  </section>
+  {% endif %}
+
   {% if submission and video %}
   <section class="mt-7 rounded-xl border border-white/10 bg-slate-900 p-5">
     <div class="flex items-start gap-3">
