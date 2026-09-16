@@ -83,7 +83,7 @@ def staff_login_page(
     db: Session = Depends(get_db),
 ) -> Response:
     if getattr(request.state, "principal", None) and request.state.principal["kind"] == "staff":
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse("/app", status_code=303)
     dev_members = []
     if dev_staff_bypass_enabled():
         dev_members = (
@@ -208,7 +208,7 @@ async def login_callback(request: Request, db: Session = Depends(get_db)):
         member.oidc_sub = subject
     db.commit()
     start_session(request, kind="staff", account_id=member.id, org_id=org_id)
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/app", status_code=303)
 
 
 @router.post("/auth/dev")
@@ -228,7 +228,7 @@ def staff_dev_login(
         account_id=member.id,
         org_id=member.org_id,
     )
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/app", status_code=303)
 
 
 @router.post("/auth/logout")

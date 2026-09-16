@@ -65,7 +65,7 @@ def _video_redirect(
     if notice:
         params["notice"] = notice
     suffix = f"?{urlencode(params)}" if params else ""
-    return RedirectResponse(url=f"/{video_id}{suffix}", status_code=303)
+    return RedirectResponse(url=f"/app/{video_id}{suffix}", status_code=303)
 
 
 def _parse_date(value: str, label: str) -> date | None | str:

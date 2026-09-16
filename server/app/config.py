@@ -20,6 +20,7 @@ OIDC_REDIRECT_URI = os.environ.get(
 DEV_STAFF_BYPASS = os.environ.get("DEV_STAFF_BYPASS", "false").lower() == "true"
 CRM_BASE_URL = os.environ.get("CRM_BASE_URL", "").rstrip("/")
 CRM_WEBHOOK_SECRET = os.environ.get("CRM_WEBHOOK_SECRET", "")
+CRM_PILOT_API_KEY = os.environ.get("CRM_PILOT_API_KEY", "")
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 BOOTSTRAP_ORG_ID = uuid.UUID(
     os.environ.get("BOOTSTRAP_ORG_ID", "00000000-0000-0000-0000-000000000001")

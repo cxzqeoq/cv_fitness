@@ -57,7 +57,7 @@ def _video_redirect(
     if notice:
         params["notice"] = notice
     suffix = f"?{urlencode(params)}" if params else ""
-    return RedirectResponse(url=f"/{video_id}{suffix}#segment-{segment_id}", status_code=303)
+    return RedirectResponse(url=f"/app/{video_id}{suffix}#segment-{segment_id}", status_code=303)
 
 
 def _validated_fields(

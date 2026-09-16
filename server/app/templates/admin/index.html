@@ -48,7 +48,7 @@
 </div>
 {% endif %}
 
-<form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" class="mb-5">
+<form id="upload-form" action="/app/upload" method="post" enctype="multipart/form-data" class="mb-5">
   <input type="file" name="file" id="file-input"
          accept=".mp4,.mov,.m4v,.webm,video/mp4,video/quicktime,video/webm"
          aria-label="Выбрать видео для загрузки" class="sr-only">
@@ -86,7 +86,7 @@
   <p id="upload-error" role="alert" class="hidden mt-2 text-sm text-red-600"></p>
 </form>
 
-<form id="bulk-form" action="/bulk" method="post">
+<form id="bulk-form" action="/app/bulk" method="post">
   <div id="bulk-actions" class="hidden mb-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 flex flex-wrap items-center gap-2">
     <span class="mr-auto text-sm text-violet-800">
       Выбрано: <strong id="selected-count">0</strong>
@@ -133,7 +133,7 @@
                    {% if v.status.value in ["pending", "processing"] %}disabled title="Дождитесь завершения обработки"{% endif %}>
           </td>
           <td class="py-2.5 px-4">
-            <a href="/{{ v.id }}" class="flex items-center gap-2.5 text-slate-800 hover:text-violet-600">
+            <a href="/app/{{ v.id }}" class="flex items-center gap-2.5 text-slate-800 hover:text-violet-600">
               <span class="w-6 h-6 rounded bg-slate-100 flex items-center justify-center"><i data-lucide="play" class="w-3 h-3"></i></span>
               <span class="font-medium">{{ v.original_name }}</span>
             </a>
@@ -164,7 +164,7 @@
         {% else %}
         <tr><td colspan="6" class="py-10 text-center text-slate-400">
           {% if q %}
-          Ничего не найдено по запросу «{{ q }}». <a href="/" class="text-violet-600 hover:text-violet-500">Сбросить поиск</a>
+          Ничего не найдено по запросу «{{ q }}». <a href="/app" class="text-violet-600 hover:text-violet-500">Сбросить поиск</a>
           {% else %}
           Пока пусто — загрузите первое видео.
           {% endif %}

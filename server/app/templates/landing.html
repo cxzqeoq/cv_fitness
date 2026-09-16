@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OMRA Fitness — видеоразбор тренировок в привычном чате</title>
+  <meta name="description" content="Программы тренировок, видео попыток и обратная связь тренера через Telegram и WhatsApp. OMRA Fitness для онлайн-тренеров и фитнес-школ.">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="OMRA Fitness — видеоразбор тренировок в привычном чате">
+  <meta property="og:description" content="Ученик отправляет видео в Telegram или WhatsApp, тренер проверяет технику, следующий урок открывается автоматически.">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta name="theme-color" content="#101113">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .grid-fade { background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 44px 44px; }
+  </style>
+</head>
+<body class="bg-[#101113] text-[#f7f8f8] antialiased">
+  <header class="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#101113]/90 backdrop-blur-xl">
+    <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8">
+      <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500 text-white"><i data-lucide="activity" class="h-4 w-4"></i></span>
+        <span>OMRA Fitness</span>
+      </a>
+      <nav class="hidden items-center gap-7 text-sm text-[#8a8f98] md:flex">
+        <a href="#workflow" class="hover:text-white">Как работает</a>
+        <a href="#product" class="hover:text-white">Продукт</a>
+        <a href="#pilot" class="hover:text-white">Пилот</a>
+      </nav>
+      <a href="/app" class="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3.5 py-2 text-sm font-medium text-white hover:border-white/30 hover:bg-white/5">
+        Кабинет тренера <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+      </a>
+    </div>
+  </header>
+
+  <main>
+    <section class="grid-fade relative overflow-hidden pt-32 pb-20 lg:pt-44 lg:pb-28">
+      <div class="pointer-events-none absolute left-1/2 top-20 h-[520px] w-[760px] -translate-x-1/2 rounded-full bg-violet-600/15 blur-[130px]"></div>
+      <div class="relative mx-auto grid max-w-7xl gap-14 px-5 lg:grid-cols-[1.02fr_.98fr] lg:items-center lg:px-8">
+        <div>
+          <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-300">
+            <span class="h-1.5 w-1.5 rounded-full bg-violet-400"></span>
+            Набираем первые фитнес-школы в пилот
+          </div>
+          <h1 class="max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
+            Видеоразбор тренировок прямо из <span class="text-violet-400">Telegram и WhatsApp</span>
+          </h1>
+          <p class="mt-6 max-w-2xl text-lg leading-8 text-[#a7abb3]">
+            Тренер собирает программу и проверяет технику в одном кабинете. Ученик получает задания и отправляет видео там, где уже общается с тренером.
+          </p>
+          <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+            <a href="#pilot" class="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-950/40 hover:bg-violet-400">
+              Подключить пилот <i data-lucide="arrow-right" class="h-4 w-4"></i>
+            </a>
+            <a href="#workflow" class="inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 px-5 py-3 text-sm font-semibold text-white hover:bg-white/5">
+              Посмотреть сценарий
+            </a>
+          </div>
+          <div class="mt-9 grid max-w-xl grid-cols-3 gap-4 border-t border-white/10 pt-6 text-sm">
+            <div><div class="font-semibold text-white">Без нового чата</div><div class="mt-1 text-xs leading-5 text-[#747983]">Telegram или WhatsApp</div></div>
+            <div><div class="font-semibold text-white">История попыток</div><div class="mt-1 text-xs leading-5 text-[#747983]">Повторы не теряются</div></div>
+            <div><div class="font-semibold text-white">Свой учебный план</div><div class="mt-1 text-xs leading-5 text-[#747983]">Уроки открываются по порядку</div></div>
+          </div>
+        </div>
+
+        <div class="relative mx-auto w-full max-w-xl">
+          <div class="absolute -inset-8 rounded-[40px] bg-violet-500/10 blur-3xl"></div>
+          <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#17181b] shadow-2xl shadow-black/50">
+            <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <div class="flex items-center gap-2 text-xs font-medium text-[#8a8f98]"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>Рабочий экран тренера</div>
+              <div class="flex gap-1.5"><span class="h-2 w-2 rounded-full bg-white/10"></span><span class="h-2 w-2 rounded-full bg-white/10"></span><span class="h-2 w-2 rounded-full bg-white/10"></span></div>
+            </div>
+            <div class="grid min-h-[430px] grid-cols-[64px_1fr] sm:grid-cols-[160px_1fr]">
+              <div class="border-r border-white/10 bg-[#111214] p-3">
+                <div class="mb-6 hidden items-center gap-2 text-xs font-semibold sm:flex"><span class="h-5 w-5 rounded bg-violet-500"></span>fitness</div>
+                <div class="space-y-2 text-[11px] text-[#747983]">
+                  <div class="flex items-center gap-2 rounded-md bg-violet-500/15 p-2 text-violet-300"><i data-lucide="layout-dashboard" class="h-3.5 w-3.5"></i><span class="hidden sm:block">Сегодня</span></div>
+                  <div class="flex items-center gap-2 p-2"><i data-lucide="graduation-cap" class="h-3.5 w-3.5"></i><span class="hidden sm:block">Ученики</span></div>
+                  <div class="flex items-center gap-2 p-2"><i data-lucide="notebook-tabs" class="h-3.5 w-3.5"></i><span class="hidden sm:block">Программы</span></div>
+                  <div class="flex items-center gap-2 p-2"><i data-lucide="dumbbell" class="h-3.5 w-3.5"></i><span class="hidden sm:block">Упражнения</span></div>
+                </div>
+              </div>
+              <div class="bg-[#f7f8fa] p-4 text-slate-900 sm:p-6">
+                <div class="flex items-start justify-between gap-3">
+                  <div><div class="text-xs text-slate-400">Очередь проверки</div><div class="mt-1 text-base font-semibold">Попытки учеников</div></div>
+                  <span class="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-medium text-amber-700">на проверке</span>
+                </div>
+                <div class="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  <div class="aspect-video bg-slate-900 p-4">
+                    <div class="flex h-full items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-slate-800 to-slate-950">
+                      <div class="relative h-28 w-20 text-violet-400">
+                        <span class="absolute left-8 top-1 h-4 w-4 rounded-full border-2 border-current"></span>
+                        <span class="absolute left-[38px] top-5 h-12 w-0.5 bg-current"></span>
+                        <span class="absolute left-[38px] top-8 h-0.5 w-12 -translate-x-6 rotate-6 bg-current"></span>
+                        <span class="absolute left-[38px] top-16 h-0.5 w-12 -translate-x-10 rotate-[65deg] bg-current"></span>
+                        <span class="absolute left-[38px] top-16 h-0.5 w-12 -rotate-[65deg] bg-current"></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="p-4">
+                    <div class="flex items-center justify-between gap-3"><div><div class="text-sm font-medium">Приседания · попытка 2</div><div class="mt-1 text-xs text-slate-400">Видео обработано, сегменты готовы</div></div><i data-lucide="circle-check" class="h-5 w-5 text-emerald-500"></i></div>
+                    <div class="mt-4 flex gap-2"><span class="rounded-md border border-violet-200 px-3 py-1.5 text-[11px] font-medium text-violet-700">Вернуть на повтор</span><span class="rounded-md bg-emerald-600 px-3 py-1.5 text-[11px] font-medium text-white">Принять работу</span></div>
+                  </div>
+                </div>
+                <div class="mt-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-500"><i data-lucide="message-circle" class="h-4 w-4 text-violet-500"></i>Результат уйдёт ученику в его чат</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="workflow" class="border-y border-white/10 bg-[#131416] py-20 lg:py-28">
+      <div class="mx-auto max-w-7xl px-5 lg:px-8">
+        <div class="max-w-2xl"><p class="text-sm font-semibold text-violet-400">Один рабочий цикл</p><h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">От программы до принятой техники</h2><p class="mt-4 leading-7 text-[#8a8f98]">Учебная логика остаётся в Fitness, а общение — в привычном мессенджере.</p></div>
+        <div class="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 md:grid-cols-2 lg:grid-cols-4">
+          {% set steps = [
+            ('01', 'Тренер назначает', 'Собирает программу из уроков и упражнений. Задание появляется до загрузки видео.', 'notebook-tabs'),
+            ('02', 'Ученик снимает', 'Получает задание в чате и отправляет видео без отдельного приложения.', 'video'),
+            ('03', 'Fitness разбирает', 'Копирует исходник, строит скелет, сегменты и сохраняет историю попыток.', 'scan-line'),
+            ('04', 'Тренер решает', 'Принимает работу или просит повтор. После принятия открывается следующий урок.', 'badge-check')
+          ] %}
+          {% for number, title, text, icon in steps %}
+          <article class="bg-[#17181b] p-6 lg:p-7">
+            <div class="flex items-center justify-between"><span class="text-xs font-semibold text-violet-400">{{ number }}</span><i data-lucide="{{ icon }}" class="h-5 w-5 text-[#5f6470]"></i></div>
+            <h3 class="mt-8 font-semibold">{{ title }}</h3><p class="mt-3 text-sm leading-6 text-[#8a8f98]">{{ text }}</p>
+          </article>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section id="product" class="bg-white py-20 text-slate-900 lg:py-28">
+      <div class="mx-auto max-w-7xl px-5 lg:px-8">
+        <div class="grid gap-12 lg:grid-cols-[.8fr_1.2fr] lg:items-start">
+          <div class="lg:sticky lg:top-28"><p class="text-sm font-semibold text-violet-600">Не универсальная LMS</p><h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Только то, что нужно для тренировочного процесса</h2><p class="mt-5 leading-7 text-slate-500">Без вебинаров, социальной сети и конструктора ради конструктора. В центре — упражнение, попытка, техника и решение тренера.</p></div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            {% set features = [
+              ('route', 'Программы и уроки', 'Последовательный план с датами и открытием следующего урока после принятия работы.'),
+              ('history', 'Несколько попыток', 'Первая, повторная и принятая попытки остаются в истории ученика.'),
+              ('person-standing', 'Скелет и сегменты', 'Видео обрабатывается на сервере и открывается даже на обычном телефоне.'),
+              ('message-square-more', 'Обратная связь в чате', 'Новое задание, готовая обработка, повтор и принятие доставляются через CRM.'),
+              ('building-2', 'Контур школы', 'Данные организаций и учеников изолированы; команда работает через omra.is.'),
+              ('shield-check', 'Контроль тренера', 'Анализ помогает проверить видео, но финальное решение всегда принимает человек.')
+            ] %}
+            {% for icon, title, text in features %}
+            <article class="rounded-2xl border border-slate-200 bg-slate-50 p-6"><span class="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><i data-lucide="{{ icon }}" class="h-5 w-5"></i></span><h3 class="mt-5 font-semibold">{{ title }}</h3><p class="mt-2 text-sm leading-6 text-slate-500">{{ text }}</p></article>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pilot" class="relative overflow-hidden border-t border-white/10 py-20 lg:py-28">
+      <div class="absolute inset-0 bg-violet-600/10"></div>
+      <div class="relative mx-auto grid max-w-6xl gap-10 px-5 lg:grid-cols-[.9fr_1.1fr] lg:items-center lg:px-8">
+        <div><p class="text-sm font-semibold text-violet-400">Ограниченный пилот</p><h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Проведём ваш реальный тренировочный цикл</h2><p class="mt-5 max-w-xl leading-7 text-[#a7abb3]">Подключим одну программу, тренера и первых учеников. Проверим доставку заданий, видеоразбор и повторные попытки на вашем процессе.</p><ul class="mt-7 space-y-3 text-sm text-[#c5c8ce]"><li class="flex gap-2"><i data-lucide="check" class="mt-0.5 h-4 w-4 text-violet-400"></i>Без переноса всей школы</li><li class="flex gap-2"><i data-lucide="check" class="mt-0.5 h-4 w-4 text-violet-400"></i>Telegram или WhatsApp</li><li class="flex gap-2"><i data-lucide="check" class="mt-0.5 h-4 w-4 text-violet-400"></i>Обратная связь по итогам пилота</li></ul></div>
+        <div class="rounded-2xl border border-white/10 bg-[#17181b] p-6 shadow-2xl shadow-black/30 sm:p-8">
+          {% if pilot_sent %}
+          <div class="flex min-h-[390px] flex-col items-center justify-center text-center" role="status"><span class="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400"><i data-lucide="check" class="h-7 w-7"></i></span><h3 class="mt-5 text-xl font-semibold">Заявка отправлена</h3><p class="mt-3 max-w-sm text-sm leading-6 text-[#8a8f98]">Свяжемся с вами и уточним программу, канал общения и формат первого пилота.</p></div>
+          {% else %}
+          <div><h3 class="text-xl font-semibold">Подключить пилот</h3><p class="mt-2 text-sm text-[#8a8f98]">Расскажите, как с вами связаться.</p></div>
+          {% if error %}<div class="mt-5 flex gap-2 rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-200" role="alert"><i data-lucide="circle-alert" class="mt-0.5 h-4 w-4 shrink-0"></i>{{ error }}</div>{% endif %}
+          <form action="/pilot" method="post" class="mt-6 space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+            <div class="grid gap-4 sm:grid-cols-2"><label class="text-xs text-[#8a8f98]">Имя<input name="name" required maxlength="120" autocomplete="name" class="mt-1.5 w-full rounded-lg border border-white/10 bg-[#101113] px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400"></label><label class="text-xs text-[#8a8f98]">Школа или команда<input name="school" maxlength="200" autocomplete="organization" class="mt-1.5 w-full rounded-lg border border-white/10 bg-[#101113] px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400"></label></div>
+            <div class="grid gap-4 sm:grid-cols-2"><label class="text-xs text-[#8a8f98]">Телефон<input name="phone" maxlength="50" autocomplete="tel" placeholder="+7 999 000-00-00" class="mt-1.5 w-full rounded-lg border border-white/10 bg-[#101113] px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400"></label><label class="text-xs text-[#8a8f98]">Email<input name="email" type="email" maxlength="320" autocomplete="email" placeholder="you@example.com" class="mt-1.5 w-full rounded-lg border border-white/10 bg-[#101113] px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400"></label></div>
+            <fieldset><legend class="text-xs text-[#8a8f98]">Предпочтительный канал</legend><div class="mt-2 flex gap-3"><label class="flex flex-1 cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-[#101113] px-3 py-2.5 text-sm"><input type="radio" name="messenger" value="telegram" checked class="accent-violet-500">Telegram</label><label class="flex flex-1 cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-[#101113] px-3 py-2.5 text-sm"><input type="radio" name="messenger" value="whatsapp" class="accent-violet-500">WhatsApp</label></div></fieldset>
+            <label class="flex items-start gap-2.5 text-xs leading-5 text-[#747983]"><input name="consent" type="checkbox" required class="mt-1 accent-violet-500">Согласен на обработку данных для связи по заявке на пилот.</label>
+            <button class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-violet-500 px-5 py-3 text-sm font-semibold text-white hover:bg-violet-400">Отправить заявку <i data-lucide="arrow-right" class="h-4 w-4"></i></button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-white/10 bg-[#0d0e10]">
+    <div class="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-xs text-[#686d76] sm:flex-row sm:items-center sm:justify-between lg:px-8"><div class="flex items-center gap-2"><span class="h-5 w-5 rounded bg-violet-500"></span><span class="font-medium text-[#a7abb3]">OMRA Fitness</span></div><p>Специализированный контур тренировок в экосистеме OMRA.</p><a href="/app" class="text-[#a7abb3] hover:text-white">Войти в кабинет</a></div>
+  </footer>
+  <script>lucide.createIcons();</script>
+</body>
+</html>

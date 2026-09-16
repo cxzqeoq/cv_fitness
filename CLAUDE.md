@@ -21,7 +21,7 @@ FastAPI + SQLAlchemy + Postgres + Jinja2 + Tailwind (CDN) + Lucide (CDN, ико�
 ```
 cd server && docker compose up -d
 ```
-Админка на `http://localhost:8000`. После правок в `app/` — пересобрать образ,
+Публичный лендинг — `http://localhost:8000/`, кабинет тренера — `/app`. После правок в `app/` — пересобрать образ,
 `docker compose up -d` не подхватывает изменения кода без билда:
 ```
 docker compose build web && docker compose up -d --force-recreate --no-deps web
@@ -74,8 +74,8 @@ theme): surface `#101113`, line `#1f2023`, ink `#f7f8f8`, muted `#8a8f98`, accen
 `app/workers/describe.py` — по превью-кадру каждого сегмента через OpenRouter
 (`google/gemini-2.5-flash` по умолчанию — достаточно для короткого описания
 позы/упражнения, топовая модель не нужна). Пишет только в пустые `description`,
-повторный запуск не тратит деньги на уже описанные сегменты. Кнопка «✨ Описать
-сегменты» в `/{video_id}`.
+повторный запуск не тратит деньги на уже описанные сегменты. Кнопка «Описать
+сегменты» в `/app/{video_id}`.
 
 ## Production
 
@@ -106,14 +106,17 @@ ssh zaurus 'pct exec 169 -- sh -lc "cd /opt/omra.fitness/server && docker compos
 - Реализация этапа 3 завершена в коде: Fitness принимает подписанный `message.in`,
   копирует video attachment из `omra.crm`, дедуплицирует событие, создаёт попытку,
   запускает pose pipeline и доставляет исходящие сообщения через persistent outbox.
+- Ядро этапа 4 реализовано: `/` — публичный Jinja/Tailwind-лендинг, кабинет тренера
+  перенесён на `/app`, форма пилота создаёт lead/deal через company-scoped
+  `CRM_PILOT_API_KEY`, доступны metadata, canonical, `robots.txt` и sitemap.
 - Актуальная миграция Fitness: `f8c1a4b6d902`; локальная Postgres на head.
-- Последняя полная проверка Fitness: 28 tests passed; browser smoke проверил CRM binding
-  и принятие messenger submission. Cross-service smoke доказал retry после outage и
-  запрет cross-tenant attachment.
-- Коммиты этапа 3: Fitness `0035407`, `omra.crm` `78923b78`.
+- Последняя проверка Fitness: 29 tests passed. Browser smoke проверил landing на
+  1440×1000 и 390×844 без horizontal overflow, кабинет и video detail под `/app`;
+  cross-service submit создал корректно атрибутированные lead/deal в `omra.crm`.
 - Незакрытый gate этапа 3: реальный Telegram round trip. В локальном `omra.crm` нет
   рабочего Telegram agent/session; тестовые `telegram_user` agents имеют пустой config
-  и невалидные session keys. До этого smoke этап 4 не публиковать.
+  и невалидные session keys. До production-публикации заменить схематичный блок лендинга
+  реальными desktop/mobile материалами после provider smoke.
 - Задачи следующей сессии ведутся в `ROADMAP.md` → «Бэклог на завтра».
 
 ## Общие правила проекта (см. также `~/.claude/CLAUDE.md`)

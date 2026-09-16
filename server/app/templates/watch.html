@@ -19,7 +19,7 @@
     </div>
     <div class="flex items-center gap-2">
       {% if is_preview %}
-      <a href="/{{ video.id }}" class="inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-white">
+      <a href="/app/{{ video.id }}" class="inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-white">
         <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> В админку
       </a>
       {% elif student_portal|default(false) %}

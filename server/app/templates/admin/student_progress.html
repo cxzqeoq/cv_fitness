@@ -70,7 +70,7 @@
   </section>
   <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
     <div class="border-b border-slate-100 px-4 py-3"><h2 class="text-sm font-semibold text-slate-800">Последние оценки</h2></div>
-    <div class="divide-y divide-slate-100">{% for record in report.records[:8] %}<a href="/{{ record.video_id }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50"><div><p class="text-sm font-medium text-slate-700">{{ record.exercise }}</p><p class="mt-0.5 text-xs text-slate-400">{{ record.date.strftime('%d.%m.%Y') }}</p></div><span class="text-sm font-semibold text-violet-700">{{ record.average|round(1) }} / 5</span></a>{% endfor %}</div>
+    <div class="divide-y divide-slate-100">{% for record in report.records[:8] %}<a href="/app/{{ record.video_id }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50"><div><p class="text-sm font-medium text-slate-700">{{ record.exercise }}</p><p class="mt-0.5 text-xs text-slate-400">{{ record.date.strftime('%d.%m.%Y') }}</p></div><span class="text-sm font-semibold text-violet-700">{{ record.average|round(1) }} / 5</span></a>{% endfor %}</div>
   </section>
 </div>
 {% else %}

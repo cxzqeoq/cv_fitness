@@ -34,7 +34,7 @@ def _redirect(
         params["notice"] = notice
     suffix = f"?{urlencode(params)}" if params else ""
     anchor = f"#segment-{segment_id}" if segment_id is not None else "#assessment"
-    return RedirectResponse(url=f"/{video_id}{suffix}{anchor}", status_code=303)
+    return RedirectResponse(url=f"/app/{video_id}{suffix}{anchor}", status_code=303)
 
 
 def _validated_scores(**scores: int | None) -> dict[str, int | None] | str:

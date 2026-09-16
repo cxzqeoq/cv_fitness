@@ -117,7 +117,11 @@ def staff_access_allowed(path: str, method: str, role: str) -> bool:
 
 def _is_public(path: str) -> bool:
     return (
-        path == "/auth/login"
+        path == "/"
+        or path == "/pilot"
+        or path == "/robots.txt"
+        or path == "/sitemap.xml"
+        or path == "/auth/login"
         or path == "/auth/start"
         or path == "/auth/callback"
         or path == "/auth/dev"
@@ -128,6 +132,7 @@ def _is_public(path: str) -> bool:
         or path.startswith("/api/public/")
         or path.startswith("/static/")
     )
+
 
 
 def _is_student_area(path: str) -> bool:

@@ -26,7 +26,7 @@
   </div>
 
   <nav class="px-2 space-y-0.5 text-sm">
-    <a href="/" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'videos' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
+    <a href="/app" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'videos' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
       <i data-lucide="layout-grid" class="w-4 h-4 shrink-0"></i>
       Видео
     </a>
@@ -92,12 +92,12 @@
       {% elif active == "settings" %}
       <span class="text-slate-900 font-medium">Настройки</span>
       {% else %}
-      <a href="/" class="hover:text-slate-900 shrink-0">Видео</a>
+      <a href="/app" class="hover:text-slate-900 shrink-0">Видео</a>
       {% block breadcrumb %}{% endblock %}
       {% endif %}
     </div>
     {% if active == "videos" %}
-    <form action="/" method="get" class="hidden sm:flex items-center gap-1.5 shrink-0">
+    <form action="/app" method="get" class="hidden sm:flex items-center gap-1.5 shrink-0">
       <label for="video-search" class="sr-only">Поиск видео</label>
       <div class="relative">
         <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400"></i>
@@ -105,7 +105,7 @@
                class="text-sm bg-slate-50 border border-slate-200 rounded-md pl-8 pr-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-violet-200">
       </div>
       {% if q %}
-      <a href="/" aria-label="Сбросить поиск" class="p-1.5 text-slate-400 hover:text-slate-700">
+      <a href="/app" aria-label="Сбросить поиск" class="p-1.5 text-slate-400 hover:text-slate-700">
         <i data-lucide="x" class="w-4 h-4"></i>
       </a>
       {% endif %}

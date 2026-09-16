@@ -48,7 +48,7 @@ from ..video_upload import format_size_limit, save_video_upload
 from ..workers.pipeline import generate_thumbnails, process_video
 from ..workers.describe import describe_video
 
-router = APIRouter()
+router = APIRouter(prefix="/app")
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
 
 MIN_SEGMENT_SECONDS = 1.0
@@ -93,7 +93,7 @@ def _segment_redirect(
     segment_id: int | None = None,
     error: str | None = None,
 ) -> RedirectResponse:
-    url = f"/{video_id}"
+    url = f"/app/{video_id}"
     if error:
         url = f"{url}?{urlencode({'segment_error': error})}"
     if segment_id is not None:
@@ -112,7 +112,7 @@ def _root_redirect(
     if error:
         params["error"] = error
     suffix = f"?{urlencode(params)}" if params else ""
-    return RedirectResponse(url=f"/{suffix}", status_code=303)
+    return RedirectResponse(url=f"/app{suffix}", status_code=303)
 
 
 def _video_segment(db: Session, video_id: int, segment_id: int) -> tuple[Video, Segment]:
@@ -202,7 +202,7 @@ def _combined_text(left: str | None, right: str | None, separator: str) -> str |
     return values[0]
 
 
-@router.get("/")
+@router.get("")
 def index(
     request: Request,
     q: str = "",
@@ -263,7 +263,7 @@ async def upload(
     # BackgroundTasks is sufficient for one worker; use an external queue
     # before enabling concurrent worker processes.
     background_tasks.add_task(process_video, video.id)
-    return RedirectResponse(url=f"/{video.id}", status_code=303)
+    return RedirectResponse(url=f"/app/{video.id}", status_code=303)
 
 
 @router.post("/bulk")
@@ -375,7 +375,7 @@ def reprocess(
     db.commit()
     _remove_artifacts(track_files, thumbs)
     background_tasks.add_task(process_video, video.id)
-    return RedirectResponse(url=f"/{video.id}", status_code=303)
+    return RedirectResponse(url=f"/app/{video.id}", status_code=303)
 
 
 @router.post("/{video_id}/delete")
@@ -392,7 +392,7 @@ def delete_video(video_id: int, db: Session = Depends(get_db)):
     db.delete(video)
     db.commit()
     _remove_artifacts(files, thumbs)
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/app", status_code=303)
 
 
 @router.get("/preview/{video_id}")
@@ -459,7 +459,7 @@ def publish_video(video_id: int, db: Session = Depends(get_db)):
         )
         db.add(publication)
         db.commit()
-    return RedirectResponse(url=f"/{video_id}", status_code=303)
+    return RedirectResponse(url=f"/app/{video_id}", status_code=303)
 
 
 @router.post("/{video_id}/unpublish")
@@ -468,7 +468,7 @@ def unpublish_video(video_id: int, db: Session = Depends(get_db)):
     if publication is not None:
         db.delete(publication)
         db.commit()
-    return RedirectResponse(url=f"/{video_id}", status_code=303)
+    return RedirectResponse(url=f"/app/{video_id}", status_code=303)
 
 
 @router.get("/{video_id}/export.srt")
@@ -627,7 +627,7 @@ def detail(
 @router.post("/{video_id}/describe")
 def describe(video_id: int, background_tasks: BackgroundTasks):
     background_tasks.add_task(describe_video, video_id)
-    return RedirectResponse(url=f"/{video_id}", status_code=303)
+    return RedirectResponse(url=f"/app/{video_id}", status_code=303)
 
 
 @router.post("/{video_id}/segments/{segment_id}")

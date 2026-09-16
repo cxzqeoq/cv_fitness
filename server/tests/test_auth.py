@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from app.auth import (
     _csrf_from_body,
     _oidc_metadata,
+    _is_public,
     staff_access_allowed,
     start_session,
 )
@@ -57,12 +58,18 @@ class StaffAccessTests(unittest.TestCase):
         self.assertFalse(staff_access_allowed("/team", "GET", "manager"))
         self.assertTrue(staff_access_allowed("/students", "GET", "manager"))
         self.assertFalse(staff_access_allowed("/students", "GET", "editor"))
-        self.assertTrue(staff_access_allowed("/1/segments/2", "POST", "editor"))
-        self.assertFalse(staff_access_allowed("/1/delete", "POST", "manager"))
-        self.assertFalse(staff_access_allowed("/1/publish", "POST", "editor"))
+        self.assertTrue(staff_access_allowed("/app/1/segments/2", "POST", "editor"))
+        self.assertFalse(staff_access_allowed("/app/1/delete", "POST", "manager"))
+        self.assertFalse(staff_access_allowed("/app/1/publish", "POST", "editor"))
         self.assertTrue(staff_access_allowed("/programs/1", "POST", "editor"))
         self.assertFalse(staff_access_allowed("/programs/1/enroll", "POST", "editor"))
         self.assertTrue(staff_access_allowed("/programs/1/enroll", "POST", "manager"))
+
+    def test_landing_is_public_and_staff_app_is_private(self):
+        self.assertTrue(_is_public("/"))
+        self.assertTrue(_is_public("/pilot"))
+        self.assertFalse(_is_public("/app"))
+        self.assertFalse(_is_public("/app/1"))
 
 
 class OidcMetadataTests(unittest.TestCase):

@@ -16,6 +16,7 @@ from .routers import (
     crm,
     auth,
     exercises,
+    landing,
     notifications,
     programs,
     progress,
@@ -61,6 +62,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(landing.router)
 app.include_router(crm.router)
 app.include_router(assessments.router)
 app.include_router(exercises.router)
