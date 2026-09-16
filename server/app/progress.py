@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from .models import AssessmentStatus, StudentVideo, Video, VideoAssessment
+from .models import Assignment, AssessmentStatus, Submission, Video, VideoAssessment
 
 
 CRITERIA: tuple[tuple[str, str], ...] = (
@@ -25,6 +25,7 @@ PERIODS: dict[str, tuple[str, int | None]] = {
 
 @dataclass(frozen=True)
 class ProgressRecord:
+    assignment_id: int
     video_id: int
     date: date
     exercise: str
@@ -36,32 +37,34 @@ class ProgressRecord:
         return round(sum(values) / len(values), 2) if values else None
 
 
-def _record_date(assignment: StudentVideo, video: Video) -> date:
-    if assignment.training_date is not None:
-        return assignment.training_date
+def _record_date(assignment: Assignment, video: Video) -> date:
+    if assignment.due_at is not None:
+        return assignment.due_at.date()
     created_at: datetime = video.created_at or assignment.created_at
     return created_at.date()
 
 
 def load_progress_records(db: Session, student_id: int) -> list[ProgressRecord]:
     rows = (
-        db.query(StudentVideo, Video, VideoAssessment)
-        .join(Video, Video.id == StudentVideo.video_id)
+        db.query(Assignment, Submission, Video, VideoAssessment)
+        .join(Submission, Submission.assignment_id == Assignment.id)
+        .join(Video, Video.id == Submission.video_id)
         .join(VideoAssessment, VideoAssessment.video_id == Video.id)
         .filter(
-            StudentVideo.student_id == student_id,
+            Assignment.student_id == student_id,
             VideoAssessment.status == AssessmentStatus.final,
         )
         .all()
     )
     records = [
         ProgressRecord(
+            assignment_id=assignment.id,
             video_id=video.id,
             date=_record_date(assignment, video),
-            exercise=(assignment.exercise_name or "Без упражнения").strip(),
+            exercise=assignment.title.strip(),
             scores={field: getattr(assessment, field) for field, _ in CRITERIA},
         )
-        for assignment, video, assessment in rows
+        for assignment, _submission, video, assessment in rows
     ]
     return sorted(records, key=lambda item: (item.date, item.video_id))
 

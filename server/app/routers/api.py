@@ -6,13 +6,13 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from ..assignment_workflow import submission_for_video
 
 from ..config import STORAGE_DIR, THUMBS_DIR
 from ..db import get_db
 from ..models import (
     AssessmentStatus,
     SegmentAssessment,
-    StudentVideo,
     Video,
     VideoAssessment,
     VideoPublication,
@@ -196,7 +196,8 @@ def get_public_segments(token: str, db: Session = Depends(get_db)):
 
 def _student_video(video_id: int, request: Request, db: Session) -> Video:
     principal = request.state.principal
-    assignment = db.get(StudentVideo, video_id)
+    submission = submission_for_video(db, video_id)
+    assignment = submission.assignment if submission is not None else None
     video = db.get(Video, video_id)
     if (
         assignment is None

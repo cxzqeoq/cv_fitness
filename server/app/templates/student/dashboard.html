@@ -69,18 +69,22 @@
     <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
       {% for item in active_history %}
       {% set status = item.assignment.status.value %}
-      {% set status_label = {'assigned': 'назначено', 'in_progress': 'в работе', 'submitted': 'на проверке'} %}
-      {% set status_class = {'assigned': 'bg-slate-800 text-slate-300', 'in_progress': 'bg-violet-400/10 text-violet-300', 'submitted': 'bg-amber-400/10 text-amber-300'} %}
-      <a href="/student/videos/{{ item.video.id }}" class="group rounded-xl border border-white/10 bg-slate-900 p-4 transition-colors hover:border-violet-400/30 hover:bg-slate-900/80">
+      {% set status_label = {'assigned': 'назначено', 'in_progress': 'в работе', 'submitted': 'на проверке', 'revision_requested': 'на доработке'} %}
+      {% set status_class = {'assigned': 'bg-slate-800 text-slate-300', 'in_progress': 'bg-violet-400/10 text-violet-300', 'submitted': 'bg-amber-400/10 text-amber-300', 'revision_requested': 'bg-rose-400/10 text-rose-300'} %}
+      <a href="/student/assignments/{{ item.assignment.id }}" class="group rounded-xl border border-white/10 bg-slate-900 p-4 transition-colors hover:border-violet-400/30 hover:bg-slate-900/80">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <p class="truncate font-medium group-hover:text-violet-300">{{ item.assignment.exercise_name or item.video.original_name }}</p>
-            <p class="mt-1 text-xs text-slate-500">{{ item.assignment.training_date.strftime('%d.%m.%Y') if item.assignment.training_date else item.video.created_at.strftime('%d.%m.%Y') }}</p>
+            <p class="truncate font-medium group-hover:text-violet-300">{{ item.assignment.title }}</p>
+            <p class="mt-1 text-xs text-slate-500">{{ item.assignment.due_at.strftime('%d.%m.%Y') if item.assignment.due_at else item.assignment.created_at.strftime('%d.%m.%Y') }}</p>
           </div>
           <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium {{ status_class[status] }}">{{ status_label[status] }}</span>
         </div>
-        {% if status == 'submitted' and item.assignment.student_comment %}
-        <p class="mt-3 line-clamp-2 text-xs text-slate-400">Ваш комментарий: {{ item.assignment.student_comment }}</p>
+        {% if status == 'submitted' and item.submission and item.submission.student_comment %}
+        <p class="mt-3 line-clamp-2 text-xs text-slate-400">Ваш комментарий: {{ item.submission.student_comment }}</p>
+        {% elif status == 'revision_requested' %}
+        <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-rose-300"><i data-lucide="upload" class="h-3.5 w-3.5"></i>Загрузить новую попытку</p>
+        {% elif not item.video %}
+        <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-300"><i data-lucide="upload" class="h-3.5 w-3.5"></i>Загрузить видео</p>
         {% elif status == 'assigned' %}
         <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-300"><i data-lucide="play" class="h-3.5 w-3.5"></i>Начать тренировку</p>
         {% else %}
@@ -105,11 +109,11 @@
     {% if completed_history %}
     <div class="mt-3 divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
       {% for item in completed_history %}
-      <a href="/student/videos/{{ item.video.id }}" class="flex items-center justify-between gap-4 p-4 hover:bg-white/[0.03]">
+      <a href="/student/assignments/{{ item.assignment.id }}" class="flex items-center justify-between gap-4 p-4 hover:bg-white/[0.03]">
         <div class="min-w-0">
-          <p class="truncate text-sm font-medium">{{ item.assignment.exercise_name or item.video.original_name }}</p>
-          <p class="mt-1 text-xs text-slate-500">{{ item.assignment.completed_at.strftime('%d.%m.%Y') if item.assignment.completed_at else item.video.created_at.strftime('%d.%m.%Y') }}</p>
-          {% if item.assignment.coach_comment %}<p class="mt-2 line-clamp-1 text-xs text-slate-400">{{ item.assignment.coach_comment }}</p>{% endif %}
+          <p class="truncate text-sm font-medium">{{ item.assignment.title }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ item.assignment.completed_at.strftime('%d.%m.%Y') if item.assignment.completed_at else item.assignment.created_at.strftime('%d.%m.%Y') }}</p>
+          {% if item.submission and item.submission.coach_comment %}<p class="mt-2 line-clamp-1 text-xs text-slate-400">{{ item.submission.coach_comment }}</p>{% endif %}
         </div>
         <div class="flex shrink-0 items-center gap-3">
           {% if item.average is not none %}<span class="text-sm font-semibold text-violet-300">{{ item.average }} <span class="text-xs font-normal text-slate-500">/ 5</span></span>{% endif %}

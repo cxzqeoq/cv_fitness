@@ -22,9 +22,18 @@ Base = declarative_base()
 
 
 def _tenant_models() -> tuple[type, ...]:
-    from .models import AppSettings, AuditEvent, Exercise, Notification, Student, TeamMember, Video
+    from .models import (
+        AppSettings,
+        Assignment,
+        AuditEvent,
+        Exercise,
+        Notification,
+        Student,
+        TeamMember,
+        Video,
+    )
 
-    return AppSettings, AuditEvent, Exercise, Notification, Student, TeamMember, Video
+    return AppSettings, Assignment, AuditEvent, Exercise, Notification, Student, TeamMember, Video
 
 
 def set_tenant(db: Session, org_id: uuid.UUID | str) -> uuid.UUID:

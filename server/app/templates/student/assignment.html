@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ assignment.title }} · CV Fitness</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+<header class="border-b border-white/10 bg-slate-950/95">
+  <div class="mx-auto flex h-16 max-w-3xl items-center justify-between px-4 sm:px-6">
+    <a href="/student" class="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><i data-lucide="arrow-left" class="h-4 w-4"></i>Мои тренировки</a>
+    <span class="font-semibold">cv.fitness</span>
+  </div>
+</header>
+<main class="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+  {% if error %}<div class="mb-4 rounded-lg border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{{ error }}</div>{% endif %}
+  {% if notice %}<div class="mb-4 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{{ notice }}</div>{% endif %}
+
+  <p class="text-xs font-medium uppercase tracking-wide text-violet-400">Назначенная тренировка</p>
+  <h1 class="mt-1 text-2xl font-semibold">{{ assignment.title }}</h1>
+  {% if assignment.due_at %}<p class="mt-1 text-sm text-slate-400">Выполнить до {{ assignment.due_at.strftime('%d.%m.%Y') }}</p>{% endif %}
+
+  {% if submission and video %}
+  <section class="mt-7 rounded-xl border border-white/10 bg-slate-900 p-5">
+    <div class="flex items-start gap-3">
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-300"><i data-lucide="loader-circle" class="h-5 w-5 {{ 'animate-spin' if video.status.value in ['pending', 'processing'] else '' }}"></i></div>
+      <div>
+        <h2 class="font-medium">Попытка {{ submission.attempt }}</h2>
+        {% if video.status.value in ['pending', 'processing'] %}
+        <p class="mt-1 text-sm text-slate-400">Видео обрабатывается. Страница обновится автоматически.</p>
+        {% elif video.status.value == 'failed' %}
+        <p class="mt-1 text-sm text-red-300">Обработка не удалась: {{ video.error or 'причина не указана' }}</p>
+        {% elif submission.status.value == 'revision_requested' %}
+        <p class="mt-1 text-sm text-slate-400">Тренер вернул попытку на доработку.</p>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+  {% if video.status.value in ['pending', 'processing'] %}<script>setTimeout(() => location.reload(), 4000);</script>{% endif %}
+  {% endif %}
+
+  {% if not submission or submission.status.value == 'revision_requested' or (video and video.status.value == 'failed') %}
+  <section class="mt-7 rounded-xl border border-white/10 bg-slate-900 p-5">
+    <h2 class="text-sm font-semibold">{{ 'Новая попытка' if submission else 'Загрузить выполнение' }}</h2>
+    {% if submission and submission.coach_comment %}<p class="mt-2 rounded-lg bg-violet-500/10 px-3 py-2 text-sm text-violet-200">Комментарий тренера: {{ submission.coach_comment }}</p>{% endif %}
+    <form action="/student/assignments/{{ assignment.id }}/upload" method="post" enctype="multipart/form-data" class="mt-4 space-y-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="block text-xs text-slate-400">Видео выполнения
+        <input name="file" type="file" accept="video/mp4,video/quicktime,video/webm,.m4v" required class="mt-1.5 block w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-violet-500/15 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-violet-300">
+      </label>
+      <button class="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500"><i data-lucide="upload" class="h-4 w-4"></i>Загрузить попытку</button>
+    </form>
+  </section>
+  {% endif %}
+</main>
+<script>lucide.createIcons();</script>
+</body>
+</html>

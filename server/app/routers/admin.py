@@ -2,8 +2,6 @@ import json
 import math
 import secrets
 import shutil
-import subprocess
-import uuid
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -23,13 +21,11 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..config import (
-    ALLOWED_VIDEO_EXTENSIONS,
     BASE_DIR,
     STORAGE_DIR,
     THUMBS_DIR,
-    UPLOAD_CHUNK_BYTES,
-    VIDEOS_DIR,
 )
+from ..assignment_workflow import submission_for_video
 from ..db import get_db
 from ..exports import build_json_export, build_srt
 from ..models import (
@@ -42,13 +38,13 @@ from ..models import (
     SegmentAssessment,
     Student,
     StudentStatus,
-    StudentVideo,
     Video,
     VideoAssessment,
     VideoPublication,
     VideoStatus,
 )
 from ..settings_store import get_app_settings
+from ..video_upload import format_size_limit, save_video_upload
 from ..workers.pipeline import generate_thumbnails, process_video
 from ..workers.describe import describe_video
 
@@ -90,38 +86,6 @@ def _invalidate_comparisons(db: Session, segment_ids: list[int]) -> None:
     ).delete(synchronize_session=False)
 
 
-def _validate_video(path: Path) -> None:
-    """Reject files that ffprobe cannot identify as video."""
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=codec_type",
-                "-of",
-                "json",
-                str(path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-        streams = json.loads(result.stdout).get("streams", [])
-    except (json.JSONDecodeError, subprocess.TimeoutExpired):
-        raise HTTPException(422, "Не удалось проверить видео.") from None
-    if result.returncode != 0 or not streams:
-        raise HTTPException(422, "Файл не содержит поддерживаемого видеопотока.")
-
-
-def _format_size_limit(size: int) -> str:
-    if size >= 1024**3:
-        return f"{size / 1024**3:g} ГБ"
-    return f"{size / 1024**2:g} МБ"
 
 
 def _segment_redirect(
@@ -270,7 +234,7 @@ def index(
             "has_active": has_active,
             "status_counts": status_counts,
             "max_upload_bytes": settings.max_upload_bytes,
-            "max_upload_label": _format_size_limit(settings.max_upload_bytes),
+            "max_upload_label": format_size_limit(settings.max_upload_bytes),
             "notice": notice[:500],
             "error": error[:500],
         },
@@ -283,32 +247,8 @@ async def upload(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    original_name = Path(file.filename or "").name
-    if not original_name:
-        raise HTTPException(400, "Выберите видеофайл.")
-    ext = Path(original_name).suffix.lower()
-    if ext not in ALLOWED_VIDEO_EXTENSIONS:
-        raise HTTPException(415, "Поддерживаются MP4, MOV, M4V и WebM.")
     settings = get_app_settings(db)
-
-    dest = VIDEOS_DIR / f"{uuid.uuid4().hex}{ext}"
-    size = 0
-    try:
-        with dest.open("xb") as out:
-            while chunk := await file.read(UPLOAD_CHUNK_BYTES):
-                size += len(chunk)
-                if size > settings.max_upload_bytes:
-                    limit = _format_size_limit(settings.max_upload_bytes)
-                    raise HTTPException(413, f"Размер видео превышает {limit}.")
-                out.write(chunk)
-        if size == 0:
-            raise HTTPException(400, "Нельзя загрузить пустой файл.")
-        _validate_video(dest)
-    except Exception:
-        dest.unlink(missing_ok=True)
-        raise
-    finally:
-        await file.close()
+    dest, original_name = await save_video_upload(file, settings.max_upload_bytes)
 
     video = Video(filename=str(dest), original_name=original_name)
     try:
@@ -445,6 +385,8 @@ def delete_video(video_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "video not found")
     if video.status in (VideoStatus.pending, VideoStatus.processing):
         raise HTTPException(409, "cannot delete a video while it is processing")
+    if submission_for_video(db, video_id) is not None:
+        raise HTTPException(409, "cannot delete a video used by a student submission")
 
     files, thumbs = _video_artifacts(video)
     db.delete(video)
@@ -571,7 +513,8 @@ def detail(
 ):
     video = db.get(Video, video_id)
     publication = db.get(VideoPublication, video_id) if video is not None else None
-    assignment = db.get(StudentVideo, video_id) if video is not None else None
+    submission = submission_for_video(db, video_id) if video is not None else None
+    assignment = submission.assignment if submission is not None else None
     assigned_student = (
         db.get(Student, assignment.student_id) if assignment is not None else None
     )
@@ -648,6 +591,7 @@ def detail(
             "publication": publication,
             "public_url": public_url,
             "assignment": assignment,
+            "submission": submission,
             "assigned_student": assigned_student,
             "students": students,
             "assessment": assessment,

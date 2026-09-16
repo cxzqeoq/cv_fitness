@@ -58,7 +58,7 @@
     </section>
     <section class="overflow-hidden rounded-xl border border-white/10 bg-slate-900">
       <div class="border-b border-white/10 px-4 py-3"><h2 class="text-sm font-semibold">Последние оценки</h2></div>
-      <div class="divide-y divide-white/10">{% for record in report.records[:8] %}<a href="/student/videos/{{ record.video_id }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.03]"><div class="min-w-0"><p class="truncate text-sm font-medium">{{ record.exercise }}</p><p class="mt-0.5 text-xs text-slate-500">{{ record.date.strftime('%d.%m.%Y') }}</p></div><span class="shrink-0 text-sm font-semibold text-violet-300">{{ record.average|round(1) }} / 5</span></a>{% endfor %}</div>
+      <div class="divide-y divide-white/10">{% for record in report.records[:8] %}<a href="/student/assignments/{{ record.assignment_id }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.03]"><div class="min-w-0"><p class="truncate text-sm font-medium">{{ record.exercise }}</p><p class="mt-0.5 text-xs text-slate-500">{{ record.date.strftime('%d.%m.%Y') }}</p></div><span class="shrink-0 text-sm font-semibold text-violet-300">{{ record.average|round(1) }} / 5</span></a>{% endfor %}</div>
     </section>
   </div>
   {% else %}

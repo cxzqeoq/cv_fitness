@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime, time, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -8,17 +8,20 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from ..assignment_workflow import reset_assignment, review_assignment
+from ..assignment_workflow import review_submission, submission_for_video
 from ..notification_service import notify_student
 
 from ..config import BASE_DIR
 from ..db import get_db
 from ..models import (
-    SegmentAssessment,
+    Assignment,
+    AssignmentStatus,
     NotificationEvent,
+    SegmentAssessment,
     Student,
     StudentStatus,
-    StudentVideo,
+    Submission,
+    SubmissionStatus,
     Video,
     VideoAssessment,
 )
@@ -147,9 +150,9 @@ def student_list(
     counts = {}
     if students:
         counts = dict(
-            db.query(StudentVideo.student_id, func.count(StudentVideo.video_id))
-            .filter(StudentVideo.student_id.in_([student.id for student in students]))
-            .group_by(StudentVideo.student_id)
+            db.query(Assignment.student_id, func.count(Assignment.id))
+            .filter(Assignment.student_id.in_([student.id for student in students]))
+            .group_by(Assignment.student_id)
             .all()
         )
     return templates.TemplateResponse(
@@ -193,6 +196,52 @@ def create_student(
     return _redirect(student_id=student.id, notice="Ученик добавлен.")
 
 
+@router.post("/{student_id}/assignments")
+def create_assignment(
+    student_id: int,
+    title: str = Form(""),
+    due_date: str = Form(""),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    student = db.get(Student, student_id)
+    if student is None:
+        raise HTTPException(404, "student not found")
+    if student.status != StudentStatus.active:
+        return _redirect(student_id=student.id, error="Нельзя назначить тренировку ученику из архива.")
+    clean_title = title.strip()
+    if not clean_title or len(clean_title) > 200:
+        return _redirect(
+            student_id=student.id,
+            error="Название тренировки обязательно и должно быть короче 200 символов.",
+        )
+    parsed_due_date = _parse_date(due_date, "срок выполнения")
+    if isinstance(parsed_due_date, str):
+        return _redirect(student_id=student.id, error=parsed_due_date)
+    due_at = (
+        datetime.combine(parsed_due_date, time.max, timezone.utc)
+        if parsed_due_date
+        else None
+    )
+    assignment = Assignment(
+        student_id=student.id,
+        title=clean_title,
+        due_at=due_at,
+        status=AssignmentStatus.assigned,
+    )
+    db.add(assignment)
+    db.flush()
+    notify_student(
+        db,
+        student_id=student.id,
+        event=NotificationEvent.assignment_created,
+        title="Новая тренировка",
+        body=f"Тренер назначил «{assignment.title}».",
+        url=f"/student/assignments/{assignment.id}",
+    )
+    db.commit()
+    return _redirect(student_id=student.id, notice="Тренировка назначена.")
+
+
 @router.post("/videos/assign")
 def assign_video(
     video_id: int = Form(...),
@@ -204,14 +253,20 @@ def assign_video(
     video = db.get(Video, video_id)
     if video is None:
         raise HTTPException(404, "video not found")
-    clean_exercise = exercise_name.strip()
-    if len(clean_exercise) > 200:
+    clean_title = exercise_name.strip() or video.original_name
+    if len(clean_title) > 200:
         return _video_redirect(video_id, error="Название упражнения должно быть короче 200 символов.")
     parsed_training_date = _parse_date(training_date, "дата тренировки")
     if isinstance(parsed_training_date, str):
         return _video_redirect(video_id, error=parsed_training_date)
+    due_at = (
+        datetime.combine(parsed_training_date, time.min, timezone.utc)
+        if parsed_training_date
+        else None
+    )
 
-    assignment = db.get(StudentVideo, video_id)
+    submission = submission_for_video(db, video_id)
+    assignment = submission.assignment if submission is not None else None
     new_student = None
     if student_id:
         try:
@@ -230,7 +285,6 @@ def assign_video(
     student_changed = assignment is not None and (
         new_student is None or assignment.student_id != new_student.id
     )
-    assignment_created = assignment is None or student_changed
     if student_changed:
         db.query(VideoAssessment).filter(VideoAssessment.video_id == video_id).delete()
         segment_ids = [segment.id for segment in video.segments]
@@ -238,7 +292,9 @@ def assign_video(
             db.query(SegmentAssessment).filter(
                 SegmentAssessment.segment_id.in_(segment_ids)
             ).delete(synchronize_session=False)
-        reset_assignment(assignment)
+        db.delete(assignment)
+        db.flush()
+        assignment = None
 
     if new_student is None:
         if assignment is not None:
@@ -246,22 +302,35 @@ def assign_video(
         db.commit()
         return _video_redirect(video_id, notice="Привязка к ученику удалена.")
 
+    assignment_created = assignment is None
     if assignment is None:
-        assignment = StudentVideo(video_id=video_id, student_id=new_student.id)
+        assignment = Assignment(
+            student_id=new_student.id,
+            title=clean_title,
+            due_at=due_at,
+            status=AssignmentStatus.assigned,
+        )
         db.add(assignment)
+        db.flush()
+        db.add(
+            Submission(
+                assignment_id=assignment.id,
+                video_id=video.id,
+                attempt=1,
+                status=SubmissionStatus.draft,
+            )
+        )
     else:
-        assignment.student_id = new_student.id
-    assignment.exercise_name = clean_exercise or None
-    assignment.training_date = parsed_training_date
+        assignment.title = clean_title
+        assignment.due_at = due_at
     if assignment_created:
-        workout_name = assignment.exercise_name or video.original_name
         notify_student(
             db,
             student_id=new_student.id,
             event=NotificationEvent.assignment_created,
             title="Новая тренировка",
-            body=f"Тренер назначил «{workout_name}».",
-            url=f"/student/videos/{video.id}",
+            body=f"Тренер назначил «{assignment.title}».",
+            url=f"/student/assignments/{assignment.id}",
         )
     db.commit()
     notice = "Видео привязано к ученику."
@@ -277,30 +346,31 @@ def review_video_assignment(
     coach_comment: str = Form(""),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    assignment = db.get(StudentVideo, video_id)
-    if assignment is None:
-        raise HTTPException(404, "assignment not found")
+    submission = submission_for_video(db, video_id)
+    if submission is None:
+        raise HTTPException(404, "submission not found")
+    assignment = submission.assignment
     previous_status = assignment.status
-    previous_comment = assignment.coach_comment
+    previous_comment = submission.coach_comment
     try:
-        review_assignment(assignment, action, coach_comment)
+        review_submission(assignment, submission, action, coach_comment)
     except ValueError as exc:
         return _redirect(student_id=assignment.student_id, error=str(exc))
     event = None
     title = ""
     body = ""
-    if action == "complete" and previous_status.value != "completed":
+    if action == "complete" and previous_status != AssignmentStatus.completed:
         event = NotificationEvent.assignment_completed
         title = "Тренировка завершена"
         body = "Тренер принял результат и завершил тренировку."
     elif action == "reopen":
         event = NotificationEvent.assignment_reopened
         title = "Тренировка возвращена в работу"
-        body = "Тренер просит доработать результат и отправить его повторно."
-    elif action == "save" and assignment.coach_comment and assignment.coach_comment != previous_comment:
+        body = "Тренер просит загрузить новую попытку."
+    elif action == "save" and submission.coach_comment and submission.coach_comment != previous_comment:
         event = NotificationEvent.trainer_replied
         title = "Новый комментарий тренера"
-        body = assignment.coach_comment
+        body = submission.coach_comment
     if event is not None:
         notify_student(
             db,
@@ -308,13 +378,13 @@ def review_video_assignment(
             event=event,
             title=title,
             body=body,
-            url=f"/student/videos/{assignment.video_id}",
+            url=f"/student/assignments/{assignment.id}",
         )
     db.commit()
     notices = {
         "save": "Комментарий тренера сохранён.",
-        "complete": "Тренировка завершена.",
-        "reopen": "Тренировка возвращена ученику в работу.",
+        "complete": "Попытка принята, тренировка завершена.",
+        "reopen": "Тренировка возвращена ученику для новой попытки.",
     }
     return _redirect(
         student_id=assignment.student_id,
@@ -334,22 +404,25 @@ def student_detail(
     if student is None:
         raise HTTPException(404, "student not found")
     rows = (
-        db.query(StudentVideo, Video, VideoAssessment)
-        .join(Video, Video.id == StudentVideo.video_id)
+        db.query(Assignment, Submission, Video, VideoAssessment)
+        .outerjoin(Submission, Submission.assignment_id == Assignment.id)
+        .outerjoin(Video, Video.id == Submission.video_id)
         .outerjoin(VideoAssessment, VideoAssessment.video_id == Video.id)
-        .filter(StudentVideo.student_id == student_id)
-        .order_by(StudentVideo.training_date.desc().nullslast(), Video.created_at.desc())
+        .filter(Assignment.student_id == student_id)
+        .order_by(Assignment.due_at.desc().nullslast(), Submission.attempt.desc())
         .all()
     )
     history = [
         {
             "assignment": assignment,
+            "submission": submission,
             "video": video,
             "assessment": assessment,
             "average": _assessment_average(assessment),
         }
-        for assignment, video, assessment in rows
+        for assignment, submission, video, assessment in rows
     ]
+    assignments_by_id = {item["assignment"].id: item["assignment"] for item in history}
     final_averages = [
         item["average"]
         for item in history
@@ -364,6 +437,7 @@ def student_detail(
             "active": "students",
             "student": student,
             "history": history,
+            "assignment_count": len(assignments_by_id),
             "reviewed_count": len(final_averages),
             "average_score": round(sum(final_averages) / len(final_averages), 1)
             if final_averages
@@ -371,10 +445,12 @@ def student_detail(
             "error": error[:500],
             "notice": notice[:500],
             "submitted_count": sum(
-                item["assignment"].status.value == "submitted" for item in history
+                assignment.status == AssignmentStatus.submitted
+                for assignment in assignments_by_id.values()
             ),
             "completed_count": sum(
-                item["assignment"].status.value == "completed" for item in history
+                assignment.status == AssignmentStatus.completed
+                for assignment in assignments_by_id.values()
             ),
         },
     )

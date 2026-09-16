@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, Form, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from ..assignment_workflow import submission_for_video
 from ..db import get_db
 from ..models import (
     AssessmentStatus,
     Segment,
     SegmentAssessment,
-    StudentVideo,
     Video,
     VideoAssessment,
     VideoStatus,
@@ -47,8 +47,8 @@ def _validated_scores(**scores: int | None) -> dict[str, int | None] | str:
 
 def _assignment_video(db: Session, video_id: int) -> Video | None:
     video = db.get(Video, video_id)
-    assignment = db.get(StudentVideo, video_id)
-    if video is None or assignment is None:
+    submission = submission_for_video(db, video_id)
+    if video is None or submission is None:
         return None
     return video
 

@@ -7,6 +7,7 @@ from app.progress import ProgressRecord, filter_progress_records, summarize_prog
 def record(video_id, day, exercise, scores):
     fields = ("technique", "range_of_motion", "stability", "tempo", "symmetry")
     return ProgressRecord(
+        assignment_id=video_id,
         video_id=video_id,
         date=day,
         exercise=exercise,

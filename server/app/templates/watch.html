@@ -60,11 +60,11 @@
           <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Статус тренировки</p>
           <span class="rounded-full px-2 py-0.5 text-[11px] font-medium {{ workflow_class[workflow_status] }}">{{ workflow_label[workflow_status] }}</span>
         </div>
-        <p class="mt-2 text-sm text-slate-300">{{ assignment.exercise_name or "Видеотренировка" }}</p>
-        {% if assignment.training_date %}<p class="mt-0.5 text-xs text-slate-500">{{ assignment.training_date.strftime("%d.%m.%Y") }}</p>{% endif %}
+        <p class="mt-2 text-sm text-slate-300">{{ assignment.title }}</p>
+        {% if assignment.due_at %}<p class="mt-0.5 text-xs text-slate-500">До {{ assignment.due_at.strftime("%d.%m.%Y") }}</p>{% endif %}
       </div>
       {% if workflow_status == "assigned" %}
-      <form action="/student/videos/{{ video.id }}/start" method="post">
+      <form action="/student/assignments/{{ assignment.id }}/start" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button class="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-400 sm:w-auto">
           <i data-lucide="play" class="h-4 w-4"></i>Начать тренировку
@@ -72,26 +72,28 @@
       </form>
       {% endif %}
     </div>
-    {% if assignment.coach_comment %}
+    {% if submission and submission.coach_comment %}
     <div class="mt-4 rounded-lg border border-violet-400/20 bg-violet-500/10 px-3 py-3">
       <p class="text-[10px] font-medium uppercase tracking-wide text-violet-300">Ответ тренера</p>
-      <p class="mt-1 text-sm text-slate-200">{{ assignment.coach_comment }}</p>
+      <p class="mt-1 text-sm text-slate-200">{{ submission.coach_comment }}</p>
     </div>
     {% endif %}
-    {% if workflow_status in ["in_progress", "submitted"] %}
-    <form action="/student/videos/{{ video.id }}/submit" method="post" class="mt-4 border-t border-white/10 pt-4">
+    {% if workflow_status == "in_progress" %}
+    <form action="/student/assignments/{{ assignment.id }}/submit" method="post" class="mt-4 border-t border-white/10 pt-4">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="text-xs text-slate-400">Комментарий к выполнению
         <textarea name="student_comment" maxlength="2000" rows="3" placeholder="Что получилось, где возникли сложности"
-                  class="mt-1.5 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-violet-400 focus:outline-none">{{ assignment.student_comment or "" }}</textarea>
+                  class="mt-1.5 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-violet-400 focus:outline-none">{{ submission.student_comment or "" }}</textarea>
       </label>
       <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        {% if workflow_status == "submitted" %}<p class="text-xs text-amber-300">Результат уже у тренера. Можно обновить комментарий.</p>{% else %}<p class="text-xs text-slate-500">После отправки тренер увидит результат в карточке ученика.</p>{% endif %}
+        <p class="text-xs text-slate-500">После отправки тренер увидит результат в карточке ученика.</p>
         <button class="inline-flex items-center justify-center gap-1.5 rounded-md bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-400">
-          <i data-lucide="send" class="h-4 w-4"></i>{{ "Обновить результат" if workflow_status == "submitted" else "Отправить тренеру" }}
+          <i data-lucide="send" class="h-4 w-4"></i>Отправить тренеру
         </button>
       </div>
     </form>
+    {% elif workflow_status == "submitted" %}
+    <div class="mt-4 border-t border-white/10 pt-3 text-sm text-amber-300">Результат отправлен тренеру.</div>
     {% elif workflow_status == "completed" %}
     <div class="mt-4 border-t border-white/10 pt-3 text-sm text-emerald-300">
       Тренировка принята{% if assignment.completed_at %} {{ assignment.completed_at.strftime("%d.%m.%Y") }}{% endif %}.

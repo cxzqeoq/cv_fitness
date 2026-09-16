@@ -1,18 +1,22 @@
 from .assessment import AssessmentStatus, SegmentAssessment, VideoAssessment
+from .assignment import Assignment, AssignmentStatus, Submission, SubmissionStatus
 from .auth import AuditEvent
 from .exercise import Exercise, ExerciseStatus, SegmentComparison, SegmentExercise
 from .notification import Notification, NotificationEvent, NotificationRecipient
 from .publication import VideoPublication
 from .settings import AppSettings, DEFAULT_AI_PROMPT
-from .student import AssignmentStatus, Student, StudentStatus, StudentVideo
+from .student import Student, StudentStatus
 from .team import TeamMember, TeamRole
 from .video import Segment, Video, VideoStatus
 
 __all__ = [
     "AuditEvent",
+    "Assignment",
     "AppSettings",
     "AssessmentStatus",
     "AssignmentStatus",
+    "Submission",
+    "SubmissionStatus",
     "DEFAULT_AI_PROMPT",
     "Exercise",
     "ExerciseStatus",
@@ -25,7 +29,6 @@ __all__ = [
     "SegmentExercise",
     "Student",
     "StudentStatus",
-    "StudentVideo",
     "TeamMember",
     "TeamRole",
     "Video",

@@ -86,7 +86,7 @@
       </button>
     </form>
     {% endif %}
-    {% if video.status.value in ["done", "failed"] and request.state.principal.role == "owner" %}
+    {% if video.status.value in ["done", "failed"] and request.state.principal.role == "owner" and not submission %}
     <form action="/{{ video.id }}/delete" method="post"
           onsubmit="return confirm('Удалить видео и все результаты обработки?')">
       <button class="inline-flex items-center gap-1.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 text-sm font-medium rounded-md px-3.5 py-1.5">
@@ -150,7 +150,7 @@
     </div>
     {% if assigned_student %}
     <div class="flex items-center gap-2">
-      {% set assignment_label = {'assigned': 'назначено', 'in_progress': 'в работе', 'submitted': 'на проверке', 'completed': 'завершено'} %}
+      {% set assignment_label = {'assigned': 'назначено', 'in_progress': 'в работе', 'submitted': 'на проверке', 'revision_requested': 'нужна новая попытка', 'completed': 'завершено'} %}
       <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{{ assignment_label[assignment.status.value] }}</span>
       <a href="/students/{{ assigned_student.id }}" class="text-xs font-medium text-violet-600 hover:text-violet-500">Открыть карточку</a>
     </div>
@@ -170,11 +170,11 @@
       </select>
     </label>
     <label class="text-xs text-slate-500">Дата тренировки
-      <input name="training_date" type="date" value="{{ assignment.training_date.isoformat() if assignment and assignment.training_date else '' }}"
+      <input name="training_date" type="date" value="{{ assignment.due_at.date().isoformat() if assignment and assignment.due_at else '' }}"
              class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
     </label>
     <label class="text-xs text-slate-500">Упражнение
-      <input name="exercise_name" maxlength="200" value="{{ assignment.exercise_name if assignment and assignment.exercise_name else '' }}" placeholder="Например, приседания"
+      <input name="exercise_name" maxlength="200" value="{{ assignment.title if assignment else '' }}" placeholder="Например, приседания"
              class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
     </label>
     <div class="sm:col-span-3 flex justify-end">

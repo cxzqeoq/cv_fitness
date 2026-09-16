@@ -2,7 +2,7 @@ import secrets
 import uuid
 
 from authlib.integrations.starlette_client import OAuthError
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -16,15 +16,23 @@ from ..auth import (
     oidc_configured,
     start_session,
 )
-from ..assignment_workflow import start_assignment, submit_assignment
+from ..assignment_workflow import (
+    latest_submission,
+    next_attempt,
+    start_assignment,
+    submit_assignment,
+)
 from ..notification_service import notify_reviewers
 from ..config import BASE_DIR, OIDC_REDIRECT_URI
 from ..db import get_db, set_tenant
 from ..models import (
     AssessmentStatus,
+    Assignment,
+    AssignmentStatus,
     NotificationEvent,
     Student,
-    StudentVideo,
+    Submission,
+    SubmissionStatus,
     TeamMember,
     Video,
     VideoAssessment,
@@ -36,6 +44,8 @@ router = APIRouter()
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
 
 
+from ..video_upload import save_video_upload
+from ..workers.pipeline import process_video
 def _auth_context(request: Request, **values) -> dict:
     return {"request": request, "csrf_token": csrf_token(request), **values}
 
@@ -46,8 +56,8 @@ def _login_redirect(path: str, error: str) -> RedirectResponse:
     return RedirectResponse(f"{path}?{urlencode({'error': error})}", status_code=303)
 
 
-def _student_video_redirect(
-    video_id: int,
+def _student_assignment_redirect(
+    assignment_id: int,
     *,
     error: str | None = None,
     notice: str | None = None,
@@ -60,7 +70,7 @@ def _student_video_redirect(
     if notice:
         params["notice"] = notice
     suffix = f"?{urlencode(params)}" if params else ""
-    return RedirectResponse(f"/student/videos/{video_id}{suffix}", status_code=303)
+    return RedirectResponse(f"/student/assignments/{assignment_id}{suffix}", status_code=303)
 
 
 @router.get("/auth/login")
@@ -247,75 +257,126 @@ def student_logout(request: Request) -> RedirectResponse:
 def _owned_assignment(
     request: Request,
     db: Session,
-    video_id: int,
-) -> tuple[StudentVideo, Video]:
+    assignment_id: int,
+) -> tuple[Assignment, Submission | None, Video | None]:
     principal = request.state.principal
-    assignment = db.get(StudentVideo, video_id)
-    video = db.get(Video, video_id)
-    if (
-        assignment is None
-        or assignment.student_id != principal["student_id"]
-        or video is None
-        or video.status != VideoStatus.done
-    ):
-        raise HTTPException(404, "video not found")
-    return assignment, video
+    assignment = db.get(Assignment, assignment_id)
+    if assignment is None or assignment.student_id != principal["student_id"]:
+        raise HTTPException(404, "assignment not found")
+    submission = latest_submission(db, assignment.id)
+    video = db.get(Video, submission.video_id) if submission is not None else None
+    return assignment, submission, video
 
 
-@router.post("/student/videos/{video_id}/start")
+@router.post("/student/assignments/{assignment_id}/start")
 def student_start_assignment(
-    video_id: int,
+    assignment_id: int,
     request: Request,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    assignment, _ = _owned_assignment(request, db, video_id)
+    assignment, _, _ = _owned_assignment(request, db, assignment_id)
     try:
         start_assignment(assignment)
     except ValueError as exc:
-        return _student_video_redirect(video_id, error=str(exc))
+        return _student_assignment_redirect(assignment_id, error=str(exc))
     db.commit()
-    return _student_video_redirect(video_id, notice="Тренировка начата.")
+    return _student_assignment_redirect(assignment_id, notice="Тренировка начата.")
 
 
-@router.post("/student/videos/{video_id}/submit")
+@router.post("/student/assignments/{assignment_id}/upload")
+async def student_upload_submission(
+    assignment_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    assignment, latest, latest_video = _owned_assignment(request, db, assignment_id)
+    if assignment.status in (AssignmentStatus.submitted, AssignmentStatus.completed):
+        return _student_assignment_redirect(
+            assignment_id,
+            error="Текущая попытка уже отправлена тренеру.",
+        )
+    if latest is not None and latest.status == SubmissionStatus.draft:
+        if latest_video is None or latest_video.status != VideoStatus.failed:
+            return _student_assignment_redirect(
+                assignment_id,
+                error="Сначала отправьте уже загруженную попытку.",
+            )
+        latest.status = SubmissionStatus.revision_requested
+
+    settings = get_app_settings(db)
+    destination, original_name = await save_video_upload(file, settings.max_upload_bytes)
+    video = Video(filename=str(destination), original_name=original_name)
+    try:
+        db.add(video)
+        db.flush()
+        db.add(
+            Submission(
+                assignment_id=assignment.id,
+                video_id=video.id,
+                attempt=next_attempt(db, assignment.id),
+                status=SubmissionStatus.draft,
+            )
+        )
+        start_assignment(assignment)
+        db.commit()
+        db.refresh(video)
+    except Exception:
+        db.rollback()
+        destination.unlink(missing_ok=True)
+        raise
+    background_tasks.add_task(process_video, video.id)
+    return _student_assignment_redirect(
+        assignment.id,
+        notice="Видео загружено и поставлено в очередь на обработку.",
+    )
+
+
+@router.post("/student/assignments/{assignment_id}/submit")
 def student_submit_assignment(
-    video_id: int,
+    assignment_id: int,
     request: Request,
     student_comment: str = Form(""),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    assignment, video = _owned_assignment(request, db, video_id)
+    assignment, submission, video = _owned_assignment(request, db, assignment_id)
+    if submission is None or video is None or video.status != VideoStatus.done:
+        return _student_assignment_redirect(
+            assignment_id,
+            error="Сначала загрузите и дождитесь обработки видео.",
+        )
     try:
-        submit_assignment(assignment, student_comment)
+        submit_assignment(assignment, submission, student_comment)
     except ValueError as exc:
-        return _student_video_redirect(video_id, error=str(exc))
+        return _student_assignment_redirect(assignment_id, error=str(exc))
     principal = request.state.principal
-    workout_name = assignment.exercise_name or video.original_name
     notify_reviewers(
         db,
         event=NotificationEvent.assignment_submitted,
         title=f"{principal['name']} отправил тренировку",
-        body=f"«{workout_name}» готова к проверке.",
+        body=f"«{assignment.title}» готова к проверке.",
         url=f"/students/{assignment.student_id}",
     )
     db.commit()
-    return _student_video_redirect(video_id, notice="Результат отправлен тренеру.")
+    return _student_assignment_redirect(assignment_id, notice="Результат отправлен тренеру.")
 
 
 @router.get("/student")
 def student_dashboard(request: Request, db: Session = Depends(get_db)) -> Response:
     principal = request.state.principal
     student = db.get(Student, principal["student_id"])
-    rows = (
-        db.query(StudentVideo, Video, VideoAssessment)
-        .join(Video, Video.id == StudentVideo.video_id)
-        .outerjoin(VideoAssessment, VideoAssessment.video_id == Video.id)
-        .filter(StudentVideo.student_id == student.id)
-        .order_by(StudentVideo.training_date.desc().nullslast(), Video.created_at.desc())
+    assignments = (
+        db.query(Assignment)
+        .filter(Assignment.student_id == student.id)
+        .order_by(Assignment.due_at.desc().nullslast(), Assignment.created_at.desc())
         .all()
     )
     history = []
-    for assignment, video, assessment in rows:
+    for assignment in assignments:
+        submission = latest_submission(db, assignment.id)
+        video = db.get(Video, submission.video_id) if submission is not None else None
+        assessment = db.get(VideoAssessment, video.id) if video is not None else None
         final = assessment if assessment and assessment.status == AssessmentStatus.final else None
         scores = []
         if final is not None:
@@ -333,6 +394,7 @@ def student_dashboard(request: Request, db: Session = Depends(get_db)) -> Respon
         history.append(
             {
                 "assignment": assignment,
+                "submission": submission,
                 "video": video,
                 "assessment": final,
                 "average": round(sum(scores) / len(scores), 1) if scores else None,
@@ -363,15 +425,32 @@ def student_dashboard(request: Request, db: Session = Depends(get_db)) -> Respon
     )
 
 
-@router.get("/student/videos/{video_id}")
-def student_watch(
-    video_id: int,
+@router.get("/student/assignments/{assignment_id}")
+def student_assignment(
+    assignment_id: int,
     request: Request,
     error: str = "",
     notice: str = "",
     db: Session = Depends(get_db),
 ) -> Response:
-    assignment, video = _owned_assignment(request, db, video_id)
+    assignment, submission, video = _owned_assignment(request, db, assignment_id)
+    if (
+        assignment.status == AssignmentStatus.revision_requested
+        or video is None
+        or video.status != VideoStatus.done
+    ):
+        return templates.TemplateResponse(
+            "student/assignment.html",
+            {
+                "request": request,
+                "assignment": assignment,
+                "submission": submission,
+                "video": video,
+                "csrf_token": csrf_token(request),
+                "error": error[:500],
+                "notice": notice[:500],
+            },
+        )
     assessment = db.get(VideoAssessment, video.id)
     final = assessment if assessment and assessment.status == AssessmentStatus.final else None
     scores = []
@@ -393,6 +472,7 @@ def student_watch(
             "request": request,
             "video": video,
             "assignment": assignment,
+            "submission": submission,
             "api_base": f"/api/student/videos/{video.id}",
             "is_preview": False,
             "student_portal": True,
