@@ -2,12 +2,15 @@
 // Чистый модуль без DOM: получает video-элемент и детектор (s.lmA) извне.
 // Пайплайн = тот же, что в segtest (parity), функции из signature.js.
 import { frameDescriptors, buildWindows, madNormalize, contextDistance,
-         detectCandidatesUnion, segmentsFromCandidates } from "./signature.js";
+         detectCandidatesUnion, refineCandidates, segmentsFromCandidates,
+         mergeSimilarSegments } from "./signature.js";
 import { ensureMeta } from "./utils.js";
 
 export const SEG_CONF = {
   win: 5, step: 2, ctx: 5, frac: 0.7, dupSec: 3,
-  combPct: [0.95, 0.7], chgPct: [0.9, 0.7]
+  combPct: [0.95, 0.7], chgPct: [0.9, 0.7],
+  minProm: 0.3, minDist: 12, minConf: 0.05,
+  minSegSec: 8, mergeThr: 0.55, mergeMaxIter: 20
 };
 
 // Надёжный seek: ставим и ждём 'seeked' (лимит 3 с), иначе проход мог стартовать не с той позиции.
@@ -127,11 +130,20 @@ export async function segmentVideo(video, lm, opts = {}){
              chg: Dm != null || Dp != null ? Math.max(Dm ?? 0, Dp ?? 0) : null };
   });
   const valid = frames.filter(f => f.desc).length;
-  const cands = valid >= 10
+  const rawCands = valid >= 10
     ? detectCandidatesUnion(sig, { frac: SEG_CONF.frac, dupSec: SEG_CONF.dupSec,
                                     combPct: SEG_CONF.combPct, chgPct: SEG_CONF.chgPct })
     : [];
+  const cands = refineCandidates(rawCands, sig, {
+    minProm: SEG_CONF.minProm,
+    minDist: SEG_CONF.minDist,
+    minConf: SEG_CONF.minConf
+  });
   const degraded = n === 0 || valid < 10;
-  const segments = segmentsFromCandidates(cands, dur);
+  let segments = segmentsFromCandidates(cands, dur, 0, SEG_CONF.minSegSec);
+  segments = mergeSimilarSegments(segments, wins, norms, {
+    mergeThr: SEG_CONF.mergeThr,
+    maxIter: SEG_CONF.mergeMaxIter
+  });
   return { segments, signal: sig, cands, n: frames.length, valid, duration: dur, degraded };
 }

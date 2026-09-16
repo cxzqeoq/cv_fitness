@@ -375,6 +375,45 @@ export function contextDistance(windows, t, norms, ctxSec = WINDOW){
   if (!ml || !mr) return null;
   return changeDistance(ml, mr, norms);
 }
+// Подпись сегмента — медиана подписей окон, попавших внутрь диапазона.
+// Нужна для сравнения паттернов соседних сегментов.
+export function segmentSignature(windows, start, end, pad = 0){
+  const selected = windows.filter(w => w.tMid >= start - pad && w.tMid <= end + pad);
+  return medianWin(selected);
+}
+
+// Объединяет наиболее похожую пару соседних сегментов, пока её сходство выше
+// порога. Граница между разными паттернами при этом сохраняется.
+export function mergeSimilarSegments(segments, windows, norms, opts = {}){
+  const { mergeThr = 0.55, maxIter = 20, pad = 0 } = opts;
+  if (!segments || segments.length < 2) return segments;
+  const segs = segments.map(s => ({ ...s }));
+  for (let iter = 0; iter < maxIter; iter++){
+    let bestSim = -1, bestIdx = -1;
+    for (let i = 0; i < segs.length - 1; i++){
+      const sigL = segmentSignature(windows, segs[i].start, segs[i].end, pad);
+      const sigR = segmentSignature(windows, segs[i + 1].start, segs[i + 1].end, pad);
+      if (!sigL || !sigR) continue;
+      const distance = changeDistance(sigL, sigR, norms).combined;
+      if (distance == null) continue;
+      const similarity = 1 / (1 + distance);
+      if (similarity > bestSim){ bestSim = similarity; bestIdx = i; }
+    }
+    if (bestIdx < 0 || bestSim < mergeThr) break;
+    const left = segs[bestIdx], right = segs[bestIdx + 1];
+    segs.splice(bestIdx, 2, {
+      n: left.n,
+      start: left.start,
+      end: right.end,
+      boundary: right.boundary,
+      conf: right.conf,
+      dom: right.dom
+    });
+  }
+  segs.forEach((s, i) => { s.n = i + 1; });
+  return segs;
+}
+
 
 // ── кандидаты и сегменты (чистые функции, юнит-тестируются) ──
 
@@ -437,6 +476,45 @@ export function detectCandidatesUnion(signal, opts = {}){
   out.sort((a, b) => a.boundary - b.boundary);
   return out;
 }
+// Отбрасывает вырожденные и малозаметные пики, затем оставляет самый
+// уверенный кандидат среди слишком близких границ.
+export function refineCandidates(cands, signal, opts = {}){
+  const {
+    minProm = 0.3,
+    promWindowSec = 30,
+    minDist = 12,
+    minConf = 0.05,
+    requireSignal = true
+  } = opts;
+  if (!cands.length) return [];
+
+  const dt = signal.length > 1 ? signal[1].t - signal[0].t : 2;
+  const halfWin = Math.max(1, Math.round(promWindowSec / 2 / dt));
+  const combVals = signal.map(s => s.comb ?? 0);
+  let filtered = cands.filter(c =>
+    c.conf >= minConf &&
+    (!requireSignal || c.Dm != null || c.Dp != null)
+  );
+
+  filtered = filtered.filter(c => {
+    const idx = signal.findIndex(s => s.t === c.peakT);
+    if (idx < 0) return true;
+    let leftMin = Infinity, rightMin = Infinity;
+    for (let i = Math.max(0, idx - halfWin); i < idx; i++)
+      leftMin = Math.min(leftMin, combVals[i]);
+    for (let i = idx + 1; i < Math.min(combVals.length, idx + halfWin + 1); i++)
+      rightMin = Math.min(rightMin, combVals[i]);
+    return c.peak - Math.min(leftMin, rightMin) >= minProm;
+  });
+
+  filtered.sort((a, b) => b.conf - a.conf);
+  const out = [];
+  for (const c of filtered){
+    if (!out.some(o => Math.abs(o.boundary - c.boundary) < minDist)) out.push(c);
+  }
+  return out.sort((a, b) => a.boundary - b.boundary);
+}
+
 
 function finish(sig, a, b, frac, channel){
   let base = Infinity;
@@ -464,21 +542,56 @@ function finish(sig, a, b, frac, channel){
 }
 
 // Сегменты из кандидатов: границы делят [t0, duration] на интервалы.
-// Каждый сегмент заканчивается границей (transition к следующему упражнению),
-// последний тянется до конца видео. Возвращает [{n, start, end, boundary, conf, dom}].
-export function segmentsFromCandidates(cands, duration, t0 = 0){
-  const segs = [];
+// Короткий сегмент сливается через менее уверенную из двух окружающих границ.
+export function segmentsFromCandidates(cands, duration, t0 = 0, minSegSec = 0){
+  const initial = [];
   let prev = t0;
   let n = 1;
   for (const c of cands){
     if (c.boundary <= prev + 0.05) continue;
-    segs.push({ n: n++, start: prev, end: c.boundary, boundary: c.boundary,
-                conf: c.conf, dom: dominant(c) });
+    initial.push({ n: n++, start: prev, end: c.boundary, boundary: c.boundary,
+                   conf: c.conf, dom: dominant(c) });
     prev = c.boundary;
   }
-  if (duration - prev > 0.05 || !segs.length){
-    segs.push({ n: n++, start: prev, end: duration, boundary: null, conf: null, dom: null });
+  if (duration - prev > 0.05 || !initial.length){
+    initial.push({ n: n++, start: prev, end: duration, boundary: null, conf: null, dom: null });
   }
+  if (!(minSegSec > 0)) return initial;
+
+  const segs = initial.map(s => ({ ...s }));
+  let changed = true;
+  while (changed && segs.length > 1){
+    changed = false;
+    for (let i = 0; i < segs.length; i++){
+      if (segs[i].end - segs[i].start >= minSegSec) continue;
+      if (i === segs.length - 1){
+        segs[i - 1].end = segs[i].end;
+        segs[i - 1].boundary = segs[i].boundary;
+        segs[i - 1].conf = segs[i].conf;
+        segs[i - 1].dom = segs[i].dom;
+        segs.splice(i, 1);
+      } else {
+        const leftConf = i > 0 ? (segs[i - 1].conf ?? Infinity) : Infinity;
+        const rightConf = segs[i].conf ?? Infinity;
+        if (rightConf <= leftConf){
+          segs[i].end = segs[i + 1].end;
+          segs[i].boundary = segs[i + 1].boundary;
+          segs[i].conf = segs[i + 1].conf;
+          segs[i].dom = segs[i + 1].dom;
+          segs.splice(i + 1, 1);
+        } else {
+          segs[i - 1].end = segs[i].end;
+          segs[i - 1].boundary = segs[i].boundary;
+          segs[i - 1].conf = segs[i].conf;
+          segs[i - 1].dom = segs[i].dom;
+          segs.splice(i, 1);
+        }
+      }
+      changed = true;
+      break;
+    }
+  }
+  segs.forEach((s, i) => { s.n = i + 1; });
   return segs;
 }
 

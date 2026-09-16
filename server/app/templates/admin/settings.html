@@ -1,0 +1,124 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="mb-5">
+  <h1 class="text-lg font-semibold">Настройки</h1>
+  <p class="text-xs text-slate-400 mt-0.5">Локальные параметры загрузки, обработки и публичного плеера.</p>
+</div>
+
+{% if error %}
+<div class="mb-4 max-w-3xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2 text-sm text-red-700" role="alert">
+  <i data-lucide="circle-alert" class="w-4 h-4 mt-0.5 shrink-0"></i>
+  <span>{{ error }}</span>
+</div>
+{% endif %}
+{% if notice %}
+<div class="mb-4 max-w-3xl rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-2 text-sm text-emerald-700" role="status">
+  <i data-lucide="circle-check" class="w-4 h-4 mt-0.5 shrink-0"></i>
+  <span>{{ notice }}</span>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5 max-w-5xl">
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-xs text-slate-400">Хранилище</p>
+    <p class="text-lg font-semibold mt-1">{{ storage_size }}</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-xs text-slate-400">Видео</p>
+    <p class="text-lg font-semibold mt-1">{{ video_count }}</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-xs text-slate-400">Публикации</p>
+    <p class="text-lg font-semibold mt-1">{{ publication_count }}</p>
+  </div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4">
+    <p class="text-xs text-slate-400">OpenRouter</p>
+    {% if ai_model %}
+    <p class="text-sm font-medium text-emerald-600 mt-1 truncate" title="{{ ai_model }}">Подключён</p>
+    <p class="text-[11px] text-slate-400 truncate mt-0.5" title="{{ ai_model }}">{{ ai_model }}</p>
+    {% else %}
+    <p class="text-sm font-medium text-amber-600 mt-1">Не настроен</p>
+    <p class="text-[11px] text-slate-400 mt-0.5">OPENROUTER_DSN отсутствует</p>
+    {% endif %}
+  </div>
+</div>
+
+<form action="/settings" method="post" class="max-w-5xl space-y-4">
+  <section class="rounded-lg border border-slate-200 bg-white">
+    <div class="px-5 py-4 border-b border-slate-100">
+      <h2 class="text-sm font-semibold text-slate-800">Загрузка</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Ограничение применяется к новым загрузкам.</p>
+    </div>
+    <div class="p-5">
+      <label class="block max-w-xs text-xs text-slate-500">
+        Максимальный размер видео, ГБ
+        <input name="max_upload_gb" type="number" min="0.1" max="50" step="0.1" required
+               value="{{ '%.1f'|format(max_upload_gb) }}"
+               class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+      </label>
+    </div>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white">
+    <div class="px-5 py-4 border-b border-slate-100">
+      <h2 class="text-sm font-semibold text-slate-800">Обработка позы</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Изменения действуют для видео, обработка которых начнётся после сохранения.</p>
+    </div>
+    <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <label class="text-xs text-slate-500">
+        Частота анализа, кадров/сек.
+        <input name="target_sample_fps" type="number" min="4" max="30" step="1" required
+               value="{{ settings.target_sample_fps }}"
+               class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+        <span class="block mt-1 text-[11px] text-slate-400">Выше — точнее скелет, но дольше обработка и больше трек.</span>
+      </label>
+      <label class="text-xs text-slate-500">
+        Точность MediaPipe
+        <select name="pose_model_complexity"
+                class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-200">
+          <option value="0" {% if settings.pose_model_complexity == 0 %}selected{% endif %}>Быстрая</option>
+          <option value="1" {% if settings.pose_model_complexity == 1 %}selected{% endif %}>Сбалансированная</option>
+          <option value="2" {% if settings.pose_model_complexity == 2 %}selected{% endif %}>Точная</option>
+        </select>
+        <span class="block mt-1 text-[11px] text-slate-400">Сбалансированная подходит для большинства тренировок.</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white">
+    <div class="px-5 py-4 border-b border-slate-100">
+      <h2 class="text-sm font-semibold text-slate-800">AI-описания</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Ключ и модель остаются в OPENROUTER_DSN; здесь хранится только инструкция.</p>
+    </div>
+    <div class="p-5">
+      <label class="block text-xs text-slate-500">
+        Инструкция для модели
+        <textarea name="ai_prompt" rows="4" minlength="20" maxlength="2000" required
+                  class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ settings.ai_prompt }}</textarea>
+      </label>
+    </div>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white">
+    <div class="px-5 py-4 border-b border-slate-100">
+      <h2 class="text-sm font-semibold text-slate-800">Публичный плеер</h2>
+    </div>
+    <div class="p-5">
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input name="show_skeleton" type="checkbox" {% if settings.show_skeleton %}checked{% endif %}
+               class="mt-0.5 rounded border-slate-300 text-violet-600 focus:ring-violet-200">
+        <span>
+          <span class="block text-sm font-medium text-slate-700">Показывать скелет поверх видео</span>
+          <span class="block text-xs text-slate-400 mt-0.5">Если отключить, публичный плеер не загружает JSON-трек скелета.</span>
+        </span>
+      </label>
+    </div>
+  </section>
+
+  <div class="flex justify-end pb-6">
+    <button class="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-4 py-2">
+      <i data-lucide="save" class="w-4 h-4"></i> Сохранить настройки
+    </button>
+  </div>
+</form>
+{% endblock %}

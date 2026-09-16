@@ -1,0 +1,12 @@
+{% extends "auth/layout.html" %}
+{% block title %}Вход команды · CV Fitness{% endblock %}
+{% block content %}
+<div class="text-center"><div class="mx-auto w-11 h-11 rounded-xl bg-violet-500/15 text-violet-300 flex items-center justify-center"><i data-lucide="shield-check" class="w-5 h-5"></i></div><h1 class="mt-4 text-xl font-semibold">Вход для команды</h1><p class="mt-1 text-sm text-slate-400">Тренеры и администраторы входят через единый аккаунт OMRA.</p></div>
+<a href="/auth/start" class="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 {{ 'pointer-events-none opacity-50' if not oidc_configured else '' }}"><i data-lucide="log-in" class="w-4 h-4"></i>Войти через omra.is</a>
+{% if not oidc_configured %}<p class="mt-2 text-xs text-amber-300 text-center">OIDC-клиент ещё не настроен в окружении.</p>{% endif %}
+{% if dev_members %}
+<div class="my-5 flex items-center gap-3 text-[10px] uppercase tracking-wide text-slate-600"><span class="h-px bg-white/10 flex-1"></span>локальная разработка<span class="h-px bg-white/10 flex-1"></span></div>
+<form action="/auth/dev" method="post" class="space-y-3"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><label class="block text-xs text-slate-400">Участник команды<select name="member_id" required class="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-200">{% for member in dev_members %}<option value="{{ member.id }}">{{ member.name }} · {{ member.role.value }}</option>{% endfor %}</select></label><button class="w-full rounded-lg border border-white/10 px-4 py-2.5 text-sm font-medium hover:bg-white/5">Войти локально</button></form>
+{% endif %}
+<p class="mt-6 text-center text-xs text-slate-500">Вы ученик? <a href="/student/login" class="text-violet-400 hover:text-violet-300">Войти по email</a></p>
+{% endblock %}

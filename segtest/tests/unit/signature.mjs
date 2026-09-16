@@ -277,4 +277,23 @@ function plateau(peakT0, peakT1, peakVal, dur = 20){
   console.log("13. refineCandidates — вырожденные, prominence, NMS — OK");
 }
 
+// 14. Короткий средний сегмент удаляет менее уверенную соседнюю границу.
+{
+  const cands = [
+    { boundary: 20, conf: 0.9, Dm: 1, Dp: 1 },
+    { boundary: 24, conf: 0.2, Dm: 1, Dp: 1 },
+    { boundary: 60, conf: 1, Dm: 1, Dp: 1 }
+  ];
+  const segments = segmentsFromCandidates(cands, 80, 0, 8);
+  assert(segments.some(s => s.start === 20 && s.end === 60));
+  assert(!segments.some(s => s.boundary === 24), "слабая граница короткого сегмента сохранена");
+  const tail = segmentsFromCandidates([
+    { boundary: 20, conf: 0.9, Dm: 1, Dp: 1 },
+    { boundary: 74, conf: 0.2, Dm: 1, Dp: 1 }
+  ], 80, 0, 8);
+  assert(tail.some(s => s.start === 20 && s.end === 80));
+  assert(!tail.some(s => s.boundary === 74), "короткий хвост не слит влево");
+  console.log("14. minSegSec — удалена менее уверенная граница — OK");
+}
+
 console.log("\nВсе тесты signature.mjs прошли.");

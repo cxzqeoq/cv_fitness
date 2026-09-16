@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Мои тренировки · CV Fitness</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+<header class="border-b border-white/10 bg-slate-950/95">
+  <div class="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
+    <div class="flex items-center gap-2">
+      <span class="h-7 w-7 rounded-md bg-violet-500"></span>
+      <span class="font-semibold">cv.fitness</span>
+      <span class="hidden text-xs text-slate-500 sm:inline">· кабинет ученика</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/student/notifications" aria-label="Уведомления" class="relative rounded-md border border-white/10 p-2 text-slate-400 hover:bg-white/5 hover:text-white">
+        <i data-lucide="bell" class="h-4 w-4"></i>
+        {% if principal.unread_notifications %}<span class="absolute -right-1.5 -top-1.5 min-w-4 rounded-full bg-violet-500 px-1 py-0.5 text-center text-[9px] font-semibold leading-none text-white">{{ principal.unread_notifications }}</span>{% endif %}
+      </a>
+      <span class="hidden text-sm text-slate-400 sm:block">{{ student.name }}</span>
+      <form action="/student/logout" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button aria-label="Выйти" class="rounded-md border border-white/10 p-2 text-slate-400 hover:bg-white/5 hover:text-white">
+          <i data-lucide="log-out" class="h-4 w-4"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-5xl px-4 py-7 sm:px-6 sm:py-10">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <p class="text-xs font-medium uppercase tracking-wide text-violet-400">Личный кабинет</p>
+      <h1 class="mt-1 text-2xl font-semibold">Здравствуйте, {{ student.name.split()[0] }}</h1>
+      <p class="mt-1 text-sm text-slate-400">Начинайте назначенные тренировки, отправляйте результат и получайте ответ тренера.</p>
+    </div>
+    <a href="/student/progress" class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-300 hover:bg-violet-500/15">
+      <i data-lucide="chart-no-axes-column-increasing" class="h-4 w-4"></i>Мой прогресс
+    </a>
+  </div>
+
+  <div class="mt-7 grid max-w-2xl grid-cols-3 gap-3">
+    <div class="rounded-xl border border-white/10 bg-slate-900 p-4">
+      <p class="text-xs text-slate-500">В работе</p>
+      <p class="mt-1 text-2xl font-semibold">{{ active_history|length }}</p>
+    </div>
+    <div class="rounded-xl border border-white/10 bg-slate-900 p-4">
+      <p class="text-xs text-slate-500">На проверке</p>
+      <p class="mt-1 text-2xl font-semibold text-amber-300">{{ submitted_count }}</p>
+    </div>
+    <div class="rounded-xl border border-white/10 bg-slate-900 p-4">
+      <p class="text-xs text-slate-500">Завершено</p>
+      <p class="mt-1 text-2xl font-semibold text-emerald-300">{{ completed_history|length }}</p>
+    </div>
+  </div>
+
+  <section class="mt-8">
+    <div class="flex items-end justify-between gap-3">
+      <div>
+        <h2 class="text-sm font-semibold">Текущие тренировки</h2>
+        <p class="mt-0.5 text-xs text-slate-500">Откройте карточку, чтобы начать или отправить результат.</p>
+      </div>
+    </div>
+    {% if active_history %}
+    <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {% for item in active_history %}
+      {% set status = item.assignment.status.value %}
+      {% set status_label = {'assigned': 'назначено', 'in_progress': 'в работе', 'submitted': 'на проверке'} %}
+      {% set status_class = {'assigned': 'bg-slate-800 text-slate-300', 'in_progress': 'bg-violet-400/10 text-violet-300', 'submitted': 'bg-amber-400/10 text-amber-300'} %}
+      <a href="/student/videos/{{ item.video.id }}" class="group rounded-xl border border-white/10 bg-slate-900 p-4 transition-colors hover:border-violet-400/30 hover:bg-slate-900/80">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="truncate font-medium group-hover:text-violet-300">{{ item.assignment.exercise_name or item.video.original_name }}</p>
+            <p class="mt-1 text-xs text-slate-500">{{ item.assignment.training_date.strftime('%d.%m.%Y') if item.assignment.training_date else item.video.created_at.strftime('%d.%m.%Y') }}</p>
+          </div>
+          <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium {{ status_class[status] }}">{{ status_label[status] }}</span>
+        </div>
+        {% if status == 'submitted' and item.assignment.student_comment %}
+        <p class="mt-3 line-clamp-2 text-xs text-slate-400">Ваш комментарий: {{ item.assignment.student_comment }}</p>
+        {% elif status == 'assigned' %}
+        <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-300"><i data-lucide="play" class="h-3.5 w-3.5"></i>Начать тренировку</p>
+        {% else %}
+        <p class="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-300"><i data-lucide="send" class="h-3.5 w-3.5"></i>Отправить результат</p>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="mt-3 rounded-xl border border-dashed border-white/10 py-10 text-center">
+      <i data-lucide="circle-check" class="mx-auto h-7 w-7 text-slate-700"></i>
+      <p class="mt-2 text-sm text-slate-400">Текущих тренировок нет.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="mt-9">
+    <div>
+      <h2 class="text-sm font-semibold">История</h2>
+      <p class="mt-0.5 text-xs text-slate-500">Завершённые тренировки и обратная связь тренера.</p>
+    </div>
+    {% if completed_history %}
+    <div class="mt-3 divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+      {% for item in completed_history %}
+      <a href="/student/videos/{{ item.video.id }}" class="flex items-center justify-between gap-4 p-4 hover:bg-white/[0.03]">
+        <div class="min-w-0">
+          <p class="truncate text-sm font-medium">{{ item.assignment.exercise_name or item.video.original_name }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ item.assignment.completed_at.strftime('%d.%m.%Y') if item.assignment.completed_at else item.video.created_at.strftime('%d.%m.%Y') }}</p>
+          {% if item.assignment.coach_comment %}<p class="mt-2 line-clamp-1 text-xs text-slate-400">{{ item.assignment.coach_comment }}</p>{% endif %}
+        </div>
+        <div class="flex shrink-0 items-center gap-3">
+          {% if item.average is not none %}<span class="text-sm font-semibold text-violet-300">{{ item.average }} <span class="text-xs font-normal text-slate-500">/ 5</span></span>{% endif %}
+          <i data-lucide="chevron-right" class="h-4 w-4 text-slate-600"></i>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="mt-3 text-sm text-slate-500">Завершённых тренировок пока нет.</p>
+    {% endif %}
+  </section>
+</main>
+<script>lucide.createIcons();</script>
+</body>
+</html>

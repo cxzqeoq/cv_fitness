@@ -77,6 +77,28 @@ theme): surface `#101113`, line `#1f2023`, ink `#f7f8f8`, muted `#8a8f98`, accen
 повторный запуск не тратит деньги на уже описанные сегменты. Кнопка «✨ Описать
 сегменты» в `/{video_id}`.
 
+## Production
+
+Хост для `omra.fitness` подготовлен на Proxmox-ноде `zaurus`: unprivileged LXC
+`169` (`omra-fitness`), внутренний адрес `10.10.11.169/24`, gateway
+`10.10.11.1`. Ресурсы: 8 vCPU, 16 GB RAM, 1 GB swap, 100 GB ZFS. Контейнер
+запускается вместе с хостом; рабочий каталог — `/opt/omra.fitness`.
+
+В контейнере Debian 12, Docker Engine и Compose plugin. Docker настроен с
+`live-restore` и ротацией `json-file` 50 MB × 3; автоматические security updates
+включены. Production Compose живёт в `/opt/omra.fitness/server`, приложение
+слушает только `10.10.11.169:8000`, Postgres — только во внутренней Docker-сети.
+Секреты находятся в `/opt/omra.fitness/server/.env` с режимом `0600`.
+
+Caddy-gateway в LXC 100 проксирует `omra.fitness` на `10.10.11.169:8000`.
+Production callback `https://omra.fitness/auth/callback` зарегистрирован в
+`omra.is`; серверные OIDC-запросы идут напрямую на `http://10.10.11.139:8000`.
+Перезапуск после доставки кода:
+
+```
+ssh zaurus 'pct exec 169 -- sh -lc "cd /opt/omra.fitness/server && docker compose up -d --build"'
+```
+
 ## Общие правила проекта (см. также `~/.claude/CLAUDE.md`)
 
 - Docker → всегда лог-ротация `json-file` (уже настроено per-service в

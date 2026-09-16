@@ -16,13 +16,10 @@ import urllib.request
 from ..config import THUMBS_DIR
 from ..db import SessionLocal
 from ..models import Segment
+from ..settings_store import get_app_settings
 
 DSN_RE = re.compile(r"^openai://([^@]+)@openrouter\.ai/api/v1/(.+)$")
 
-PROMPT = (
-    "Опиши коротко по-русски, что за упражнение делает человек на этом кадре "
-    "и в какой он позе. 1-2 предложения, без вступлений."
-)
 
 
 def _client():
@@ -35,14 +32,14 @@ def _client():
     return m.group(1), m.group(2)  # key, model
 
 
-def describe_image(key: str, model: str, image_path) -> str:
+def describe_image(key: str, model: str, image_path, prompt: str) -> str:
     img_b64 = base64.b64encode(image_path.read_bytes()).decode()
     payload = {
         "model": model,
         "messages": [{
             "role": "user",
             "content": [
-                {"type": "text", "text": PROMPT},
+                {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
             ],
         }],
@@ -65,6 +62,7 @@ def describe_video(video_id: int) -> dict:
     db = SessionLocal()
     result = {"done": 0, "skipped": 0, "failed": []}
     try:
+        settings = get_app_settings(db)
         segments = (
             db.query(Segment)
             .filter(Segment.video_id == video_id)
@@ -80,7 +78,7 @@ def describe_video(video_id: int) -> dict:
                 result["failed"].append((seg.id, "no thumbnail"))
                 continue
             try:
-                seg.description = describe_image(key, model, thumb)
+                seg.description = describe_image(key, model, thumb, settings.ai_prompt)
                 db.commit()
                 result["done"] += 1
             except Exception as exc:  # noqa: BLE001 - keep going on per-segment failures

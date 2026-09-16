@@ -2,33 +2,237 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ video.original_name if video else "Тренировка" }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ video.original_name }}</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center">
-{% if not video %}
-<p class="p-6 text-slate-500">Видео не найдено.</p>
-{% else %}
-<div class="w-full max-w-2xl p-4">
-  <div class="relative w-full">
-    <video id="player" src="/api/videos/{{ video.id }}/file" controls playsinline
-           class="w-full rounded"></video>
-    <canvas id="overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+<header class="border-b border-white/10 bg-slate-950/95 backdrop-blur sticky top-0 z-20">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2 min-w-0">
+      <div class="w-6 h-6 rounded bg-violet-500 shrink-0"></div>
+      <span class="font-semibold text-sm shrink-0">cv.fitness</span>
+      {% if is_preview %}
+      <span class="text-[11px] font-medium text-amber-300 bg-amber-400/10 rounded-full px-2 py-0.5">Предпросмотр</span>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-2">
+      {% if is_preview %}
+      <a href="/{{ video.id }}" class="inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-white">
+        <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> В админку
+      </a>
+      {% elif student_portal|default(false) %}
+      <a href="/student" class="inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-white">
+        <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Мои тренировки
+      </a>
+      {% elif public_url %}
+      <button id="share-button" type="button"
+              class="inline-flex items-center gap-1.5 rounded-md border border-white/10 hover:bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200">
+        <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+        <span>Поделиться</span>
+      </button>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-4 sm:px-6 sm:py-6">
+  <div class="mb-4">
+    <h1 class="text-lg sm:text-xl font-semibold truncate">{{ video.original_name }}</h1>
+    <p class="text-xs text-slate-500 mt-1">{{ video.segments|length }} упражнений · {{ (video.duration_sec // 60)|int }}:{{ "%02d"|format(video.duration_sec % 60) }}</p>
   </div>
 
-  <div id="seg-bar" class="relative h-2 mt-2 rounded bg-slate-800 overflow-hidden"></div>
+  {% if student_portal|default(false) and assignment %}
+  {% set workflow_status = assignment.status.value %}
+  {% set workflow_label = {'assigned': 'Назначено', 'in_progress': 'В работе', 'submitted': 'На проверке', 'completed': 'Завершено'} %}
+  {% set workflow_class = {'assigned': 'bg-slate-800 text-slate-300', 'in_progress': 'bg-violet-400/10 text-violet-300', 'submitted': 'bg-amber-400/10 text-amber-300', 'completed': 'bg-emerald-400/10 text-emerald-300'} %}
+  {% if error %}
+  <div class="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200" role="alert">{{ error }}</div>
+  {% endif %}
+  {% if notice %}
+  <div class="mb-4 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" role="status">{{ notice }}</div>
+  {% endif %}
+  <section class="mb-5 rounded-xl border border-white/10 bg-slate-900 p-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <div class="flex items-center gap-2">
+          <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500">Статус тренировки</p>
+          <span class="rounded-full px-2 py-0.5 text-[11px] font-medium {{ workflow_class[workflow_status] }}">{{ workflow_label[workflow_status] }}</span>
+        </div>
+        <p class="mt-2 text-sm text-slate-300">{{ assignment.exercise_name or "Видеотренировка" }}</p>
+        {% if assignment.training_date %}<p class="mt-0.5 text-xs text-slate-500">{{ assignment.training_date.strftime("%d.%m.%Y") }}</p>{% endif %}
+      </div>
+      {% if workflow_status == "assigned" %}
+      <form action="/student/videos/{{ video.id }}/start" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-400 sm:w-auto">
+          <i data-lucide="play" class="h-4 w-4"></i>Начать тренировку
+        </button>
+      </form>
+      {% endif %}
+    </div>
+    {% if assignment.coach_comment %}
+    <div class="mt-4 rounded-lg border border-violet-400/20 bg-violet-500/10 px-3 py-3">
+      <p class="text-[10px] font-medium uppercase tracking-wide text-violet-300">Ответ тренера</p>
+      <p class="mt-1 text-sm text-slate-200">{{ assignment.coach_comment }}</p>
+    </div>
+    {% endif %}
+    {% if workflow_status in ["in_progress", "submitted"] %}
+    <form action="/student/videos/{{ video.id }}/submit" method="post" class="mt-4 border-t border-white/10 pt-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="text-xs text-slate-400">Комментарий к выполнению
+        <textarea name="student_comment" maxlength="2000" rows="3" placeholder="Что получилось, где возникли сложности"
+                  class="mt-1.5 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-violet-400 focus:outline-none">{{ assignment.student_comment or "" }}</textarea>
+      </label>
+      <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {% if workflow_status == "submitted" %}<p class="text-xs text-amber-300">Результат уже у тренера. Можно обновить комментарий.</p>{% else %}<p class="text-xs text-slate-500">После отправки тренер увидит результат в карточке ученика.</p>{% endif %}
+        <button class="inline-flex items-center justify-center gap-1.5 rounded-md bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-400">
+          <i data-lucide="send" class="h-4 w-4"></i>{{ "Обновить результат" if workflow_status == "submitted" else "Отправить тренеру" }}
+        </button>
+      </div>
+    </form>
+    {% elif workflow_status == "completed" %}
+    <div class="mt-4 border-t border-white/10 pt-3 text-sm text-emerald-300">
+      Тренировка принята{% if assignment.completed_at %} {{ assignment.completed_at.strftime("%d.%m.%Y") }}{% endif %}.
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
 
-  <div class="mt-3 space-y-1">
-    <div id="seg-label" class="text-emerald-400 font-medium"></div>
-    <div id="subtitle" class="text-slate-200"></div>
+  {% if coach_assessment %}
+  <section class="mb-5 rounded-xl border border-violet-400/20 bg-violet-500/10 p-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <p class="text-[11px] uppercase tracking-wide text-violet-300 font-medium">Оценка тренера</p>
+        <p class="text-2xl font-semibold mt-1">{{ assessment_average }}<span class="text-sm text-slate-400 font-normal"> / 5</span></p>
+      </div>
+      <div class="grid grid-cols-5 gap-2 text-center">
+        {% for label, value in [
+          ("Техника", coach_assessment.technique),
+          ("Амплитуда", coach_assessment.range_of_motion),
+          ("Стабильность", coach_assessment.stability),
+          ("Темп", coach_assessment.tempo),
+          ("Симметрия", coach_assessment.symmetry)
+        ] %}
+        <div class="min-w-14 rounded-lg bg-black/20 px-2 py-1.5"><p class="text-sm font-semibold">{{ value }}</p><p class="text-[9px] text-slate-500 truncate" title="{{ label }}">{{ label }}</p></div>
+        {% endfor %}
+      </div>
+    </div>
+    <p class="mt-3 text-sm text-slate-200">{{ coach_assessment.summary }}</p>
+    {% if coach_assessment.recommendations %}
+    <div class="mt-3 border-t border-white/10 pt-3"><p class="text-[10px] uppercase tracking-wide text-slate-500">Рекомендации</p><p class="text-sm text-slate-300 mt-1">{{ coach_assessment.recommendations }}</p></div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-5 lg:items-start">
+    <section class="min-w-0 lg:sticky lg:top-20">
+      <div class="relative w-full overflow-hidden rounded-xl bg-black shadow-2xl shadow-black/30 aspect-video">
+        <video id="player" src="{{ api_base }}/file" controls playsinline preload="metadata"
+               class="w-full h-full object-contain"></video>
+        <canvas id="overlay" class="absolute inset-0 w-full h-full pointer-events-none {% if not show_skeleton %}hidden{% endif %}"></canvas>
+      </div>
+
+      <div id="seg-bar" class="relative h-2.5 mt-3 rounded-full bg-slate-800 overflow-hidden" aria-label="Таймлайн упражнений"></div>
+
+      <div class="mt-4 rounded-xl border border-white/10 bg-slate-900/70 p-4 min-h-32">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p id="segment-counter" class="text-[11px] uppercase tracking-wide text-violet-400 font-medium">Выберите упражнение</p>
+            <h2 id="seg-label" class="text-base font-semibold mt-1"></h2>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <button id="previous-segment" type="button" aria-label="Предыдущее упражнение"
+                    class="p-2 rounded-md border border-white/10 text-slate-300 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button id="next-segment" type="button" aria-label="Следующее упражнение"
+                    class="p-2 rounded-md border border-white/10 text-slate-300 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <p id="description" class="text-sm text-slate-400 mt-2"></p>
+        <div id="subtitle-wrap" class="hidden mt-3 rounded-lg bg-black/30 px-3 py-2">
+          <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Субтитры</p>
+          <p id="subtitle" class="text-sm text-slate-100"></p>
+        </div>
+      </div>
+        <div id="coach-feedback" class="hidden mt-3 rounded-lg border border-violet-400/20 bg-violet-500/10 px-3 py-2">
+          <p class="text-[10px] uppercase tracking-wide text-violet-300 mb-2">Комментарий тренера</p>
+          <div id="coach-scores" class="flex flex-wrap gap-1.5"></div>
+          <p id="coach-comment" class="text-sm text-slate-200 mt-2"></p>
+        </div>
+    </section>
+
+    <aside class="min-w-0">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold">Упражнения</h2>
+        <span class="text-xs text-slate-500">{{ video.segments|length }}</span>
+      </div>
+      <div id="segment-list" class="space-y-2">
+        {% for segment in video.segments %}
+        <button type="button" data-segment-index="{{ loop.index0 }}" data-start="{{ segment.start_sec }}"
+                class="segment-button w-full text-left rounded-lg border border-white/10 bg-slate-900/60 hover:bg-slate-900 hover:border-white/20 p-2 flex gap-3 transition-colors">
+          <div class="relative w-24 sm:w-28 aspect-video rounded-md bg-slate-900 overflow-hidden shrink-0">
+            <img src="{{ api_base }}/segments/{{ loop.index }}/thumb" alt="" loading="lazy"
+                 class="w-full h-full object-cover" onerror="this.style.display='none'">
+            <span class="absolute top-1 left-1 bg-black/70 rounded px-1.5 py-0.5 text-[10px] font-medium">{{ loop.index }}</span>
+          </div>
+          <div class="min-w-0 py-0.5">
+            <p class="text-sm font-medium text-slate-200 truncate">{{ segment.label or "Упражнение " ~ loop.index }}</p>
+            <p class="text-[11px] text-slate-500 mt-1">{{ "%d:%02d"|format(segment.start_sec // 60, segment.start_sec % 60) }}–{{ "%d:%02d"|format(segment.end_sec // 60, segment.end_sec % 60) }}</p>
+            {% if segment.description %}<p class="text-xs text-slate-400 mt-1 line-clamp-2">{{ segment.description }}</p>{% endif %}
+          </div>
+        </button>
+        {% endfor %}
+      </div>
+    </aside>
   </div>
-</div>
+</main>
 
 <script type="module">
-  import { initPlayer } from "/static/player.js";
-  initPlayer({{ video.id }});
+  import { initPlayer } from "/static/player.js?v=4";
+  initPlayer({ apiBase: {{ api_base|tojson }}, showSkeleton: {{ show_skeleton|tojson }} });
 </script>
-{% endif %}
+<script>
+  lucide.createIcons();
+  async function copyShareText(value) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = value;
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      const copied = document.execCommand("copy");
+      field.remove();
+      return copied;
+    }
+  }
+
+  const shareButton = document.getElementById("share-button");
+  if (shareButton) {
+    shareButton.addEventListener("click", async () => {
+      const url = {{ public_url|tojson }};
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: document.title, url });
+          return;
+        } catch (error) {
+          if (error.name === "AbortError") return;
+        }
+      }
+      const copied = await copyShareText(url);
+      const label = shareButton.querySelector("span");
+      label.textContent = copied ? "Ссылка скопирована" : "Не удалось скопировать";
+      setTimeout(() => { label.textContent = "Поделиться"; }, 1800);
+    });
+  }
+</script>
 </body>
 </html>

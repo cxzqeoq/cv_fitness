@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Мой прогресс · CV Fitness</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+<header class="border-b border-white/10 bg-slate-950/95">
+  <div class="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
+    <a href="/student" class="inline-flex items-center gap-2 text-sm text-slate-300 hover:text-white"><i data-lucide="arrow-left" class="h-4 w-4"></i>Мои тренировки</a>
+    <a href="/student/notifications" aria-label="Уведомления" class="relative rounded-md border border-white/10 p-2 text-slate-400 hover:bg-white/5 hover:text-white"><i data-lucide="bell" class="h-4 w-4"></i>{% if principal.unread_notifications %}<span class="absolute -right-1.5 -top-1.5 min-w-4 rounded-full bg-violet-500 px-1 py-0.5 text-center text-[9px] font-semibold leading-none text-white">{{ principal.unread_notifications }}</span>{% endif %}</a>
+  </div>
+</header>
+
+<main class="mx-auto max-w-5xl px-4 py-7 sm:px-6 sm:py-10">
+  <div>
+    <p class="text-xs font-medium uppercase tracking-wide text-violet-400">Личный кабинет</p>
+    <h1 class="mt-1 text-2xl font-semibold">Мой прогресс</h1>
+    <p class="mt-1 text-sm text-slate-400">Динамика итоговых оценок и критериев техники.</p>
+  </div>
+
+  <form method="get" class="mt-5 grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-slate-900 p-3 sm:grid-cols-[160px_minmax(0,1fr)_auto] sm:items-end">
+    <label class="text-xs text-slate-400">Период<select name="period" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100">{% for value, options in report.periods.items() %}<option value="{{ value }}" {% if report.period == value %}selected{% endif %}>{{ options[0] }}</option>{% endfor %}</select></label>
+    <label class="text-xs text-slate-400">Упражнение<select name="exercise" class="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100"><option value="">Все упражнения</option>{% for option in report.exercise_options %}<option value="{{ option }}" {% if report.exercise == option %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></label>
+    <button class="rounded-lg bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-400">Показать</button>
+  </form>
+
+  {% if report.count %}
+  <div class="mt-5 grid grid-cols-3 gap-3">
+    <div class="rounded-xl border border-white/10 bg-slate-900 p-4"><p class="text-xs text-slate-500">Последняя</p><p class="mt-1 text-xl font-semibold">{{ report.latest_average }}</p></div>
+    <div class="rounded-xl border border-white/10 bg-slate-900 p-4"><p class="text-xs text-slate-500">Изменение</p><p class="mt-1 text-xl font-semibold {{ 'text-emerald-300' if report.trend_delta and report.trend_delta > 0 else 'text-red-300' if report.trend_delta and report.trend_delta < 0 else '' }}">{% if report.trend_delta is not none %}{{ '+' if report.trend_delta > 0 else '' }}{{ report.trend_delta }}{% else %}—{% endif %}</p></div>
+    <div class="rounded-xl border border-white/10 bg-slate-900 p-4"><p class="text-xs text-slate-500">Тренировок</p><p class="mt-1 text-xl font-semibold">{{ report.count }}</p></div>
+  </div>
+
+  <section class="mt-5 rounded-xl border border-white/10 bg-slate-900 p-4 sm:p-5">
+    <div><h2 class="text-sm font-semibold">Динамика оценки</h2><p class="mt-0.5 text-xs text-slate-500">{{ report.period_label }}{% if report.exercise %} · {{ report.exercise }}{% endif %}</p></div>
+    <div class="mt-5 grid grid-cols-[24px_minmax(0,1fr)] gap-2">
+      <div class="flex h-52 flex-col justify-between pb-1 text-right text-[10px] text-slate-600"><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span></div>
+      <div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="h-52 w-full overflow-visible" role="img" aria-label="График средней оценки">
+          {% for y in [0,25,50,75,100] %}<line x1="0" y1="{{ y }}" x2="100" y2="{{ y }}" stroke="#334155" stroke-width="0.5" vector-effect="non-scaling-stroke" />{% endfor %}
+          {% if report.points|length > 1 %}<polyline points="{{ report.polyline }}" fill="none" stroke="#a78bfa" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />{% endif %}
+          {% for point in report.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="2" fill="#a78bfa" vector-effect="non-scaling-stroke"><title>{{ point.date.strftime('%d.%m.%Y') }} · {{ point.average }}</title></circle>{% endfor %}
+        </svg>
+        <div class="mt-2 flex justify-between text-[10px] text-slate-600"><span>{{ report.points[0].date.strftime('%d.%m.%Y') }}</span><span>{{ report.points[-1].date.strftime('%d.%m.%Y') }}</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+    <section class="rounded-xl border border-white/10 bg-slate-900 p-4 sm:p-5">
+      <h2 class="text-sm font-semibold">Критерии</h2>
+      <div class="mt-4 space-y-4">{% for criterion in report.criteria %}<div><div class="mb-1.5 flex items-center justify-between"><span class="text-xs text-slate-400">{{ criterion.label }}</span><span class="text-xs font-semibold">{{ criterion.average if criterion.average is not none else '—' }}</span></div><div class="h-2 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full bg-violet-400" style="width: {{ criterion.average / 5 * 100 if criterion.average is not none else 0 }}%"></div></div>{% if criterion.delta is not none %}<p class="mt-1 text-[10px] {{ 'text-emerald-400' if criterion.delta > 0 else 'text-red-400' if criterion.delta < 0 else 'text-slate-600' }}">{{ '+' if criterion.delta > 0 else '' }}{{ criterion.delta }} с первой оценки</p>{% endif %}</div>{% endfor %}</div>
+      {% if report.best_criterion and report.focus_criterion %}<div class="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs"><div><p class="text-slate-500">Сильная сторона</p><p class="mt-1 font-medium text-emerald-300">{{ report.best_criterion.label }}</p></div><div><p class="text-slate-500">Зона внимания</p><p class="mt-1 font-medium text-amber-300">{{ report.focus_criterion.label }}</p></div></div>{% endif %}
+    </section>
+    <section class="overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+      <div class="border-b border-white/10 px-4 py-3"><h2 class="text-sm font-semibold">Последние оценки</h2></div>
+      <div class="divide-y divide-white/10">{% for record in report.records[:8] %}<a href="/student/videos/{{ record.video_id }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.03]"><div class="min-w-0"><p class="truncate text-sm font-medium">{{ record.exercise }}</p><p class="mt-0.5 text-xs text-slate-500">{{ record.date.strftime('%d.%m.%Y') }}</p></div><span class="shrink-0 text-sm font-semibold text-violet-300">{{ record.average|round(1) }} / 5</span></a>{% endfor %}</div>
+    </section>
+  </div>
+  {% else %}
+  <div class="mt-6 rounded-xl border border-dashed border-white/10 py-14 text-center"><i data-lucide="chart-no-axes-column" class="mx-auto h-8 w-8 text-slate-700"></i><p class="mt-3 text-sm font-medium text-slate-300">Нет оценок за выбранный период</p><p class="mt-1 text-xs text-slate-500">Измените фильтр или дождитесь итоговой оценки тренера.</p></div>
+  {% endif %}
+</main>
+<script>lucide.createIcons();</script>
+</body>
+</html>

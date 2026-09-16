@@ -1,54 +1,342 @@
 {% extends "admin/base.html" %}
 {% block content %}
-<div class="flex items-center justify-between mb-5">
-  <h1 class="text-lg font-semibold">Видео</h1>
-  <form action="/upload" method="post" enctype="multipart/form-data" class="flex items-center gap-2">
-    <input type="file" name="file" accept="video/*" required id="file-input" class="hidden"
-           onchange="this.form.requestSubmit()">
-    <label for="file-input"
-           class="cursor-pointer inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
-      <i data-lucide="upload" class="w-4 h-4"></i>
-      Загрузить
-    </label>
-  </form>
+<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
+  <div>
+    <h1 class="text-lg font-semibold">Видео</h1>
+    {% if q %}
+    <p class="text-xs text-slate-400 mt-0.5">По запросу «{{ q }}»: {{ videos|length }}</p>
+    {% elif videos %}
+    <div class="flex flex-wrap items-center gap-2 mt-1.5 text-xs">
+      {% if status_counts["processing"] %}
+      <span class="inline-flex items-center gap-1 text-amber-600">
+        <i data-lucide="loader-circle" class="w-3.5 h-3.5 animate-spin"></i>
+        Обрабатывается: {{ status_counts["processing"] }}
+      </span>
+      {% endif %}
+      {% if status_counts["pending"] %}
+      <span class="inline-flex items-center gap-1 text-slate-500">
+        <i data-lucide="clock-3" class="w-3.5 h-3.5"></i>
+        В очереди: {{ status_counts["pending"] }}
+      </span>
+      {% endif %}
+      {% if status_counts["failed"] %}
+      <span class="inline-flex items-center gap-1 text-red-600">
+        <i data-lucide="circle-alert" class="w-3.5 h-3.5"></i>
+        Ошибок: {{ status_counts["failed"] }}
+      </span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  <button id="upload-button" type="button"
+          class="inline-flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
+    <i data-lucide="upload" class="w-4 h-4"></i>
+    Выбрать видео
+  </button>
 </div>
 
-<div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
-  <table class="w-full text-sm">
-    <thead>
-      <tr class="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-200 bg-slate-50/60">
-        <th class="py-2.5 px-4 font-medium">Название</th>
-        <th class="py-2.5 px-4 font-medium">Статус</th>
-        <th class="py-2.5 px-4 font-medium">Длительность</th>
-        <th class="py-2.5 px-4 font-medium">Сегментов</th>
-        <th class="py-2.5 px-4 font-medium">Загружено</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for v in videos %}
-      <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-        <td class="py-2.5 px-4">
-          <a href="/{{ v.id }}" class="flex items-center gap-2.5 text-slate-800 hover:text-violet-600">
-            <span class="w-6 h-6 rounded bg-slate-100 flex items-center justify-center"><i data-lucide="play" class="w-3 h-3"></i></span>
-            <span class="font-medium">{{ v.original_name }}</span>
-          </a>
-        </td>
-        <td class="py-2.5 px-4">
-          {% set badge = {"pending": "bg-slate-100 text-slate-500", "processing": "bg-amber-50 text-amber-600",
-                           "done": "bg-emerald-50 text-emerald-600", "failed": "bg-red-50 text-red-600"} %}
-          {% set label = {"pending": "в очереди", "processing": "обработка", "done": "готово", "failed": "ошибка"} %}
-          <span class="px-2 py-0.5 rounded-full text-xs font-medium {{ badge[v.status.value] }}">{{ label[v.status.value] }}</span>
-        </td>
-        <td class="py-2.5 px-4 text-slate-500">
-          {% if v.duration_sec %}{{ (v.duration_sec // 60)|int }}:{{ "%02d"|format(v.duration_sec % 60) }}{% else %}—{% endif %}
-        </td>
-        <td class="py-2.5 px-4 text-slate-500">{{ v.segments|length or "—" }}</td>
-        <td class="py-2.5 px-4 text-slate-400">{{ v.created_at.strftime("%d.%m %H:%M") if v.created_at else "—" }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="5" class="py-10 text-center text-slate-400">Пока пусто — загрузи первое видео.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{% if error %}
+<div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2 text-sm text-red-700" role="alert">
+  <i data-lucide="circle-alert" class="w-4 h-4 mt-0.5 shrink-0"></i>
+  <span>{{ error }}</span>
 </div>
+{% endif %}
+{% if notice %}
+<div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-2 text-sm text-emerald-700" role="status">
+  <i data-lucide="circle-check" class="w-4 h-4 mt-0.5 shrink-0"></i>
+  <span>{{ notice }}</span>
+</div>
+{% endif %}
+
+<form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" class="mb-5">
+  <input type="file" name="file" id="file-input"
+         accept=".mp4,.mov,.m4v,.webm,video/mp4,video/quicktime,video/webm"
+         aria-label="Выбрать видео для загрузки" class="sr-only">
+  <div id="drop-zone"
+       class="rounded-lg border-2 border-dashed border-slate-200 bg-white px-6 py-6 text-center transition-colors">
+    <div id="upload-idle">
+      <div class="mx-auto w-9 h-9 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center">
+        <i data-lucide="file-video" class="w-4.5 h-4.5"></i>
+      </div>
+      <p class="mt-2 text-sm font-medium text-slate-700">Перетащите видео сюда</p>
+      <p class="mt-0.5 text-xs text-slate-400">
+        или
+        <button id="browse-button" type="button" class="text-violet-600 hover:text-violet-500 font-medium">выберите файл</button>
+        · MP4, MOV, M4V или WebM · до {{ max_upload_label }}
+      </p>
+    </div>
+    <div id="upload-progress" class="hidden max-w-xl mx-auto text-left" aria-live="polite">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+          <i data-lucide="file-video" class="w-4.5 h-4.5"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center justify-between gap-3 text-sm">
+            <span id="upload-name" class="font-medium text-slate-700 truncate"></span>
+            <span id="upload-percent" class="text-slate-500 tabular-nums">0%</span>
+          </div>
+          <p id="upload-state" class="text-xs text-slate-400 mt-0.5">Загрузка…</p>
+        </div>
+      </div>
+      <div class="h-1.5 rounded-full bg-slate-100 overflow-hidden mt-3">
+        <div id="upload-bar" class="h-full bg-violet-500 transition-[width]" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+  <p id="upload-error" role="alert" class="hidden mt-2 text-sm text-red-600"></p>
+</form>
+
+<form id="bulk-form" action="/bulk" method="post">
+  <div id="bulk-actions" class="hidden mb-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 flex flex-wrap items-center gap-2">
+    <span class="mr-auto text-sm text-violet-800">
+      Выбрано: <strong id="selected-count">0</strong>
+    </span>
+    {% if request.state.principal.role in ["owner", "manager"] %}
+    <button name="action" value="publish"
+            class="bulk-button inline-flex items-center gap-1.5 rounded-md border border-violet-200 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50">
+      <i data-lucide="globe-2" class="w-3.5 h-3.5"></i> Опубликовать
+    </button>
+    {% endif %}
+    <button name="action" value="reprocess"
+            class="bulk-button inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+      <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Обработать снова
+    </button>
+    {% if request.state.principal.role == "owner" %}
+    <button name="action" value="delete"
+            class="bulk-button inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Удалить
+    </button>
+    {% endif %}
+  </div>
+
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-slate-200 bg-slate-50/60">
+          <th class="py-2.5 pl-4 pr-1 font-medium w-9">
+            <input id="select-all" type="checkbox" aria-label="Выбрать все видео"
+                   class="rounded border-slate-300 text-violet-600 focus:ring-violet-200">
+          </th>
+          <th class="py-2.5 px-4 font-medium">Название</th>
+          <th class="py-2.5 px-4 font-medium">Статус</th>
+          <th class="py-2.5 px-4 font-medium">Длительность</th>
+          <th class="py-2.5 px-4 font-medium">Сегментов</th>
+          <th class="py-2.5 px-4 font-medium">Загружено</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in videos %}
+        <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+          <td class="py-2.5 pl-4 pr-1">
+            <input type="checkbox" name="video_ids" value="{{ v.id }}" aria-label="Выбрать {{ v.original_name }}"
+                   class="video-checkbox rounded border-slate-300 text-violet-600 focus:ring-violet-200"
+                   {% if v.status.value in ["pending", "processing"] %}disabled title="Дождитесь завершения обработки"{% endif %}>
+          </td>
+          <td class="py-2.5 px-4">
+            <a href="/{{ v.id }}" class="flex items-center gap-2.5 text-slate-800 hover:text-violet-600">
+              <span class="w-6 h-6 rounded bg-slate-100 flex items-center justify-center"><i data-lucide="play" class="w-3 h-3"></i></span>
+              <span class="font-medium">{{ v.original_name }}</span>
+            </a>
+          </td>
+          <td class="py-2.5 px-4 min-w-36">
+            {% set badge = {"pending": "bg-slate-100 text-slate-500", "processing": "bg-amber-50 text-amber-600",
+                             "done": "bg-emerald-50 text-emerald-600", "failed": "bg-red-50 text-red-600"} %}
+            {% set label = {"pending": "в очереди", "processing": "обработка", "done": "готово", "failed": "ошибка"} %}
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium {{ badge[v.status.value] }}">{{ label[v.status.value] }}</span>
+            {% if v.status.value == "pending" %}
+            <p class="text-[11px] text-slate-400 mt-1">Ожидает запуска</p>
+            {% elif v.status.value == "processing" %}
+            {% set progress = ((v.frames_done or 0) / v.frames_total * 100) if v.frames_total else 0 %}
+            <div class="h-1 rounded-full bg-amber-100 overflow-hidden mt-1.5 w-24">
+              <div class="h-full bg-amber-500" style="width: {{ progress }}%"></div>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">{{ progress|round|int }}% · {{ v.frames_done or 0 }} / {{ v.frames_total or "?" }} кадров</p>
+            {% elif v.status.value == "failed" and v.error %}
+            <p class="text-[11px] text-red-500 mt-1 max-w-44 truncate" title="{{ v.error }}">{{ v.error }}</p>
+            {% endif %}
+          </td>
+          <td class="py-2.5 px-4 text-slate-500">
+            {% if v.duration_sec %}{{ (v.duration_sec // 60)|int }}:{{ "%02d"|format(v.duration_sec % 60) }}{% else %}—{% endif %}
+          </td>
+          <td class="py-2.5 px-4 text-slate-500">{{ v.segments|length or "—" }}</td>
+          <td class="py-2.5 px-4 text-slate-400">{{ v.created_at.strftime("%d.%m %H:%M") if v.created_at else "—" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="py-10 text-center text-slate-400">
+          {% if q %}
+          Ничего не найдено по запросу «{{ q }}». <a href="/" class="text-violet-600 hover:text-violet-500">Сбросить поиск</a>
+          {% else %}
+          Пока пусто — загрузите первое видео.
+          {% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+
+<script>
+window.cvUploadActive = false;
+
+const uploadForm = document.getElementById("upload-form");
+const fileInput = document.getElementById("file-input");
+const uploadButton = document.getElementById("upload-button");
+const browseButton = document.getElementById("browse-button");
+const dropZone = document.getElementById("drop-zone");
+const uploadIdle = document.getElementById("upload-idle");
+const uploadProgress = document.getElementById("upload-progress");
+const uploadName = document.getElementById("upload-name");
+const uploadPercent = document.getElementById("upload-percent");
+const uploadState = document.getElementById("upload-state");
+const uploadBar = document.getElementById("upload-bar");
+const uploadError = document.getElementById("upload-error");
+const maxUploadBytes = {{ max_upload_bytes }};
+const allowedExtensions = new Set(["mp4", "mov", "m4v", "webm"]);
+const bulkForm = document.getElementById("bulk-form");
+const bulkActions = document.getElementById("bulk-actions");
+const selectAll = document.getElementById("select-all");
+const rowCheckboxes = [...document.querySelectorAll(".video-checkbox:not(:disabled)")];
+const selectedCount = document.getElementById("selected-count");
+const bulkButtons = [...document.querySelectorAll(".bulk-button")];
+
+function refreshBulkSelection() {
+  const checked = rowCheckboxes.filter(checkbox => checkbox.checked).length;
+  selectedCount.textContent = checked;
+  bulkActions.classList.toggle("hidden", checked === 0);
+  selectAll.checked = rowCheckboxes.length > 0 && checked === rowCheckboxes.length;
+  selectAll.indeterminate = checked > 0 && checked < rowCheckboxes.length;
+  for (const button of bulkButtons) button.disabled = checked === 0;
+}
+
+selectAll.addEventListener("change", () => {
+  for (const checkbox of rowCheckboxes) checkbox.checked = selectAll.checked;
+  refreshBulkSelection();
+});
+for (const checkbox of rowCheckboxes) {
+  checkbox.addEventListener("change", refreshBulkSelection);
+}
+bulkForm.addEventListener("submit", event => {
+  const checked = rowCheckboxes.filter(checkbox => checkbox.checked).length;
+  if (!checked) {
+    event.preventDefault();
+    return;
+  }
+  const action = event.submitter?.value;
+  const confirmation = {
+    reprocess: "Повторная обработка заменит трек, сегменты, описания и превью. Публичные ссылки будут недоступны до завершения. Продолжить?",
+    delete: "Удалить выбранные видео и все результаты обработки?",
+  }[action];
+  if (confirmation && !confirm(confirmation)) event.preventDefault();
+});
+refreshBulkSelection();
+
+function resetUpload(message) {
+  window.cvUploadActive = false;
+  fileInput.value = "";
+  fileInput.disabled = false;
+  uploadButton.disabled = false;
+  browseButton.disabled = false;
+  dropZone.classList.remove("opacity-70", "border-violet-400", "bg-violet-50");
+  uploadProgress.classList.add("hidden");
+  uploadIdle.classList.remove("hidden");
+  uploadError.textContent = message;
+  uploadError.classList.toggle("hidden", !message);
+}
+
+function startUpload(file) {
+  const extension = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "";
+  if (!allowedExtensions.has(extension)) {
+    resetUpload("Поддерживаются MP4, MOV, M4V и WebM.");
+    return;
+  }
+  if (file.size === 0) {
+    resetUpload("Нельзя загрузить пустой файл.");
+    return;
+  }
+  if (file.size > maxUploadBytes) {
+    resetUpload("Размер видео превышает {{ max_upload_label }}.");
+    return;
+  }
+
+  window.cvUploadActive = true;
+  fileInput.disabled = true;
+  uploadButton.disabled = true;
+  browseButton.disabled = true;
+  uploadError.classList.add("hidden");
+  uploadIdle.classList.add("hidden");
+  uploadProgress.classList.remove("hidden");
+  dropZone.classList.add("opacity-70");
+  uploadName.textContent = file.name;
+  uploadPercent.textContent = "0%";
+  uploadState.textContent = `Загрузка · ${(file.size / 1024 / 1024).toFixed(1)} МБ`;
+  uploadBar.style.width = "0%";
+
+  const payload = new FormData();
+  payload.append("file", file);
+  const request = new XMLHttpRequest();
+  request.open("POST", uploadForm.action);
+  request.upload.addEventListener("progress", event => {
+    if (!event.lengthComputable) return;
+    const percent = Math.min(100, Math.round(event.loaded / event.total * 100));
+    uploadPercent.textContent = `${percent}%`;
+    uploadBar.style.width = `${percent}%`;
+  });
+  request.upload.addEventListener("load", () => {
+    uploadPercent.textContent = "100%";
+    uploadBar.style.width = "100%";
+    uploadState.textContent = "Проверяем видео…";
+  });
+  request.addEventListener("load", () => {
+    if (request.status >= 200 && request.status < 400) {
+      uploadState.textContent = "Видео принято. Открываем обработку…";
+      window.location.assign(request.responseURL);
+      return;
+    }
+    let message = "Не удалось загрузить видео.";
+    try {
+      message = JSON.parse(request.responseText).detail || message;
+    } catch {
+      // Keep the stable fallback for non-JSON proxy errors.
+    }
+    resetUpload(message);
+  });
+  request.addEventListener("error", () => resetUpload("Соединение прервано во время загрузки."));
+  request.send(payload);
+}
+
+uploadForm.addEventListener("submit", event => event.preventDefault());
+uploadButton.addEventListener("click", () => fileInput.click());
+browseButton.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) startUpload(fileInput.files[0]);
+});
+for (const eventName of ["dragenter", "dragover"]) {
+  dropZone.addEventListener(eventName, event => {
+    event.preventDefault();
+    if (!window.cvUploadActive) dropZone.classList.add("border-violet-400", "bg-violet-50");
+  });
+}
+for (const eventName of ["dragleave", "drop"]) {
+  dropZone.addEventListener(eventName, event => {
+    event.preventDefault();
+    dropZone.classList.remove("border-violet-400", "bg-violet-50");
+  });
+}
+dropZone.addEventListener("drop", event => {
+  if (!window.cvUploadActive && event.dataTransfer.files.length) {
+    startUpload(event.dataTransfer.files[0]);
+  }
+});
+
+{% if has_active %}
+function refreshQueue() {
+  if (window.cvUploadActive || rowCheckboxes.some(checkbox => checkbox.checked)) {
+    setTimeout(refreshQueue, 4000);
+    return;
+  }
+  location.reload();
+}
+setTimeout(refreshQueue, 4000);
+{% endif %}
+</script>
 {% endblock %}

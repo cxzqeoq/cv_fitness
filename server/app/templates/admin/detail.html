@@ -8,7 +8,7 @@
                  "done": "bg-emerald-50 text-emerald-600", "failed": "bg-red-50 text-red-600"} %}
 {% set label = {"pending": "в очереди", "processing": "обработка", "done": "готово", "failed": "ошибка"} %}
 
-<div class="flex items-start justify-between gap-4 mb-5">
+<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-5">
   <div class="flex items-center gap-3 min-w-0">
     <a href="/" class="text-slate-400 hover:text-slate-700"><i data-lucide="arrow-left" class="w-5 h-5"></i></a>
     <div class="w-14 h-9 rounded-md bg-slate-900 overflow-hidden shrink-0">
@@ -20,33 +20,204 @@
         <span class="px-2 py-0.5 rounded-full font-medium {{ badge[video.status.value] }}">{{ label[video.status.value] }}</span>
         <span>{{ video.segments|length }} сегментов</span>
         {% if video.duration_sec %}<span>{{ (video.duration_sec // 60)|int }}:{{ "%02d"|format(video.duration_sec % 60) }}</span>{% endif %}
-        {% if video.error %}<span class="text-red-500">{{ video.error }}</span>{% endif %}
+        {% if publication %}<span class="inline-flex items-center gap-1 text-emerald-600"><i data-lucide="globe-2" class="w-3 h-3"></i> опубликовано</span>{% endif %}
       </div>
     </div>
   </div>
-  {% if video.status.value == "done" %}
-  <div class="flex items-center gap-2 shrink-0">
-    <form action="/{{ video.id }}/describe" method="post">
-      <button class="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-md px-3.5 py-1.5">
-        <i data-lucide="sparkles" class="w-4 h-4"></i> Описать сегменты
+  <div class="flex items-center flex-wrap gap-2 sm:justify-end">
+    {% if video.status.value == "done" %}
+    <a href="/preview/{{ video.id }}" target="_blank"
+       class="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-md px-3.5 py-1.5">
+      <i data-lucide="play" class="w-4 h-4"></i> Предпросмотр
+    </a>
+    <details class="relative">
+      <summary class="list-none cursor-pointer inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-md px-3.5 py-1.5">
+        <i data-lucide="download" class="w-4 h-4"></i> Экспорт
+        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
+      </summary>
+      <div class="absolute right-0 z-20 mt-1.5 w-52 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+        <a href="/{{ video.id }}/export.srt"
+           class="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+          <i data-lucide="captions" class="w-4 h-4 text-slate-400"></i>
+          Субтитры SRT
+        </a>
+        <a href="/{{ video.id }}/export.json"
+           class="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+          <i data-lucide="braces" class="w-4 h-4 text-slate-400"></i>
+          Сегменты JSON
+        </a>
+      </div>
+    </details>
+    {% if publication %}
+    <button id="copy-public-link" type="button" data-url="{{ public_url }}"
+            class="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
+      <i data-lucide="link" class="w-4 h-4"></i> <span>Копировать ссылку</span>
+    </button>
+    {% if request.state.principal.role in ["owner", "manager"] %}
+    <form action="/{{ video.id }}/unpublish" method="post"
+          onsubmit="return confirm('Снять видео с публикации? Текущая ссылка перестанет работать.')">
+      <button class="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-sm font-medium rounded-md px-3.5 py-1.5">
+        <i data-lucide="globe-lock" class="w-4 h-4"></i> Снять
       </button>
     </form>
-    <a href="/watch/{{ video.id }}" target="_blank"
-       class="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
-      <i data-lucide="play" class="w-4 h-4"></i> Смотреть
-    </a>
+    {% endif %}
+    {% elif request.state.principal.role in ["owner", "manager"] %}
+    <form action="/{{ video.id }}/publish" method="post">
+      <button class="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
+        <i data-lucide="globe-2" class="w-4 h-4"></i> Опубликовать
+      </button>
+    </form>
+    {% endif %}
+    <form action="/{{ video.id }}/describe" method="post">
+      <button class="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-md px-3.5 py-1.5">
+        <i data-lucide="sparkles" class="w-4 h-4"></i> Описать
+      </button>
+    </form>
+    <form action="/{{ video.id }}/reprocess" method="post"
+          onsubmit="return confirm('Повторная обработка заменит трек, сегменты, описания и превью. Публичная ссылка будет недоступна до завершения. Продолжить?')">
+      <button class="inline-flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-md px-3.5 py-1.5">
+        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Обработать снова
+      </button>
+    </form>
+    {% elif video.status.value == "failed" %}
+    <form action="/{{ video.id }}/reprocess" method="post">
+      <button class="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-3.5 py-1.5">
+        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Обработать снова
+      </button>
+    </form>
+    {% endif %}
+    {% if video.status.value in ["done", "failed"] and request.state.principal.role == "owner" %}
+    <form action="/{{ video.id }}/delete" method="post"
+          onsubmit="return confirm('Удалить видео и все результаты обработки?')">
+      <button class="inline-flex items-center gap-1.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 text-sm font-medium rounded-md px-3.5 py-1.5">
+        <i data-lucide="trash-2" class="w-4 h-4"></i> Удалить
+      </button>
+    </form>
+    {% endif %}
   </div>
-  {% endif %}
 </div>
 
-{% if video.status.value == "processing" %}
-<div class="mb-6 max-w-md">
-  <div class="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-    <div class="h-full bg-violet-500" style="width: {{ ((video.frames_done or 0) / video.frames_total * 100) if video.frames_total else 0 }}%"></div>
-  </div>
-  <p class="text-xs text-slate-400 mt-1.5">{{ video.frames_done or 0 }} / {{ video.frames_total or "?" }} кадров</p>
+{% if error %}
+<div class="mb-4 max-w-3xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2 text-sm text-red-700" role="alert">
+  <i data-lucide="circle-alert" class="w-4 h-4 mt-0.5 shrink-0"></i><span>{{ error }}</span>
+</div>
+{% endif %}
+{% if notice %}
+<div class="mb-4 max-w-3xl rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-2 text-sm text-emerald-700" role="status">
+  <i data-lucide="circle-check" class="w-4 h-4 mt-0.5 shrink-0"></i><span>{{ notice }}</span>
+</div>
+{% endif %}
+
+{% if video.status.value == "pending" %}
+<div class="mb-6 max-w-xl rounded-lg border border-slate-200 bg-white px-4 py-3 flex items-center gap-3 text-sm text-slate-600">
+  <i data-lucide="clock-3" class="w-4 h-4 text-slate-400"></i>
+  Видео поставлено в очередь. Обработка начнётся автоматически.
 </div>
 <script>setTimeout(() => location.reload(), 4000);</script>
+{% elif video.status.value == "processing" %}
+<div class="mb-6 max-w-xl rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3">
+  <div class="flex items-center gap-2 text-sm font-medium text-amber-700 mb-2">
+    <i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i> Обработка видео
+  </div>
+  <div class="h-1.5 rounded-full bg-amber-100 overflow-hidden">
+    <div class="h-full bg-amber-500" style="width: {{ ((video.frames_done or 0) / video.frames_total * 100) if video.frames_total else 0 }}%"></div>
+  </div>
+  <p class="text-xs text-amber-600 mt-1.5">{{ video.frames_done or 0 }} / {{ video.frames_total or "?" }} кадров</p>
+</div>
+<script>setTimeout(() => location.reload(), 4000);</script>
+{% elif video.status.value == "failed" %}
+<div class="mb-6 max-w-xl rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+  <div class="flex items-center gap-2 text-sm font-medium text-red-700">
+    <i data-lucide="circle-alert" class="w-4 h-4"></i> Обработка завершилась с ошибкой
+  </div>
+  <p class="text-xs text-red-600 mt-1.5 break-words">{{ video.error or "Причина не указана." }}</p>
+</div>
+{% endif %}
+
+{% if segment_error %}
+<div class="mb-6 max-w-2xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2 text-sm text-red-700" role="alert">
+  <i data-lucide="circle-alert" class="w-4 h-4 mt-0.5 shrink-0"></i>
+  <span>{{ segment_error }}</span>
+</div>
+{% endif %}
+
+{% if request.state.principal.role in ["owner", "manager"] %}
+<section class="mb-5 rounded-lg border border-slate-200 bg-white">
+  <div class="border-b border-slate-100 px-4 py-3 flex items-center justify-between gap-3">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-800">Ученик и тренировка</h2>
+      <p class="text-xs text-slate-400 mt-0.5">Привязка нужна для оценки и истории прогресса.</p>
+    </div>
+    {% if assigned_student %}
+    <div class="flex items-center gap-2">
+      {% set assignment_label = {'assigned': 'назначено', 'in_progress': 'в работе', 'submitted': 'на проверке', 'completed': 'завершено'} %}
+      <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{{ assignment_label[assignment.status.value] }}</span>
+      <a href="/students/{{ assigned_student.id }}" class="text-xs font-medium text-violet-600 hover:text-violet-500">Открыть карточку</a>
+    </div>
+    {% endif %}
+  </div>
+  {% if students %}
+  <form action="/students/videos/assign" method="post" class="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3"
+        data-original-student="{{ assignment.student_id if assignment else '' }}"
+        onsubmit="if (this.elements.student_id.value !== this.dataset.originalStudent && this.dataset.originalStudent && !confirm('Смена ученика сбросит сохранённые оценки этого видео. Продолжить?')) return false">
+    <input type="hidden" name="video_id" value="{{ video.id }}">
+    <label class="text-xs text-slate-500">Ученик
+      <select name="student_id" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-200">
+        <option value="">Без ученика</option>
+        {% for student in students %}
+        <option value="{{ student.id }}" {% if assignment and assignment.student_id == student.id %}selected{% endif %}>{{ student.name }}{% if student.status.value == "archived" %} · архив{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="text-xs text-slate-500">Дата тренировки
+      <input name="training_date" type="date" value="{{ assignment.training_date.isoformat() if assignment and assignment.training_date else '' }}"
+             class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+    </label>
+    <label class="text-xs text-slate-500">Упражнение
+      <input name="exercise_name" maxlength="200" value="{{ assignment.exercise_name if assignment and assignment.exercise_name else '' }}" placeholder="Например, приседания"
+             class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+    </label>
+    <div class="sm:col-span-3 flex justify-end">
+      <button class="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800"><i data-lucide="save" class="w-4 h-4"></i>Сохранить привязку</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="p-4 text-sm text-slate-500">Сначала <a href="/students" class="font-medium text-violet-600 hover:text-violet-500">добавьте ученика</a>.</div>
+  {% endif %}
+</section>
+
+{% if video.status.value == "done" and assignment %}
+<section id="assessment" class="mb-5 rounded-lg border border-slate-200 bg-white scroll-mt-6">
+  <div class="border-b border-slate-100 px-4 py-3 flex items-center justify-between gap-3">
+    <div><h2 class="text-sm font-semibold text-slate-800">Оценка тренировки</h2><p class="text-xs text-slate-400 mt-0.5">Пять критериев по шкале от 1 до 5.</p></div>
+    {% if assessment %}<span class="rounded-full px-2 py-0.5 text-xs font-medium {{ 'bg-emerald-50 text-emerald-600' if assessment.status.value == 'final' else 'bg-amber-50 text-amber-600' }}">{{ 'готово' if assessment.status.value == 'final' else 'черновик' }}</span>{% endif %}
+  </div>
+  <form action="/assessments/videos/{{ video.id }}" method="post" class="p-4">
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      {% for field, label in assessment_criteria %}
+      <label class="text-xs text-slate-500">{{ label }}
+        <select name="{{ field }}" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-200">
+          <option value="">—</option>
+          {% for score in range(1, 6) %}<option value="{{ score }}" {% if assessment and assessment|attr(field) == score %}selected{% endif %}>{{ score }}</option>{% endfor %}
+        </select>
+      </label>
+      {% endfor %}
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
+      <label class="text-xs text-slate-500">Заключение тренера
+        <textarea name="summary" rows="3" maxlength="5000" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ assessment.summary if assessment and assessment.summary else '' }}</textarea>
+      </label>
+      <label class="text-xs text-slate-500">Рекомендации
+        <textarea name="recommendations" rows="3" maxlength="5000" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ assessment.recommendations if assessment and assessment.recommendations else '' }}</textarea>
+      </label>
+    </div>
+    <div class="mt-3 flex flex-wrap justify-end gap-2">
+      <button name="status" value="draft" class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"><i data-lucide="save" class="w-4 h-4"></i>Сохранить черновик</button>
+      <button name="status" value="final" class="inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-violet-500"><i data-lucide="badge-check" class="w-4 h-4"></i>Опубликовать оценку</button>
+    </div>
+  </form>
+</section>
+{% endif %}
 {% endif %}
 
 <div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4 mb-8">
@@ -75,31 +246,191 @@
 </div>
 
 <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Клипы ({{ video.segments|length }})</h2>
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
   {% for s in video.segments %}
-  <form action="/{{ video.id }}/segments/{{ s.id }}" method="post"
-        class="border border-slate-200 rounded-lg bg-white overflow-hidden flex flex-col">
+  <article id="segment-{{ s.id }}" class="border border-slate-200 rounded-lg bg-white overflow-hidden flex flex-col scroll-mt-6">
     <div class="relative aspect-video bg-slate-900">
-      <img src="/api/videos/{{ video.id }}/segments/{{ loop.index }}/thumb" class="w-full h-full object-cover" loading="lazy"
-           onerror="this.style.display='none'">
+      <img src="/api/videos/{{ video.id }}/segments/{{ loop.index }}/thumb?start={{ s.start_sec }}&end={{ s.end_sec }}"
+           class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'">
       <span class="absolute top-1.5 left-1.5 text-[11px] font-semibold bg-black/70 text-white rounded px-1.5 py-0.5">{{ loop.index }}</span>
       <span class="absolute bottom-1.5 right-1.5 text-[11px] font-medium bg-black/70 text-white rounded px-1.5 py-0.5">
         {{ "%d:%02d"|format(s.start_sec // 60, s.start_sec % 60) }}–{{ "%d:%02d"|format(s.end_sec // 60, s.end_sec % 60) }}
       </span>
     </div>
-    <div class="p-3 space-y-2 flex-1 flex flex-col">
+
+    <form action="/{{ video.id }}/segments/{{ s.id }}" method="post" class="p-3 space-y-2 flex-1 flex flex-col">
       <input name="label" value="{{ s.label or '' }}" placeholder="Название упражнения"
              class="w-full text-sm font-medium bg-transparent border-0 border-b border-transparent hover:border-slate-200 focus:border-violet-300 focus:outline-none px-0 py-1">
+      <div class="grid grid-cols-2 gap-2">
+        <label class="text-[11px] text-slate-400">
+          Начало, сек.
+          <input name="start_sec" type="number" step="0.1" min="0"
+                 value="{{ '%.2f'|format(s.start_sec) }}" {% if loop.first %}readonly{% endif %}
+                 class="mt-1 w-full text-xs text-slate-600 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-200 read-only:bg-slate-50 read-only:text-slate-400">
+        </label>
+        <label class="text-[11px] text-slate-400">
+          Конец, сек.
+          <input name="end_sec" type="number" step="0.1" min="1"
+                 value="{{ '%.2f'|format(s.end_sec) }}" {% if loop.last %}readonly{% endif %}
+                 class="mt-1 w-full text-xs text-slate-600 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-200 read-only:bg-slate-50 read-only:text-slate-400">
+        </label>
+      </div>
+      <p class="text-[11px] text-slate-400">Соседние границы обновятся автоматически.</p>
       <textarea name="description" placeholder="Описание, что происходит" rows="2"
                 class="w-full text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ s.description or '' }}</textarea>
       <textarea name="subtitle" placeholder="Субтитры" rows="2"
                 class="w-full text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ s.subtitle or '' }}</textarea>
       <button class="mt-auto self-start bg-slate-900 hover:bg-slate-800 text-white rounded-md px-3 py-1 text-xs font-medium">Сохранить</button>
+    </form>
+
+    {% if assignment and request.state.principal.role in ["owner", "manager"] %}
+    {% set segment_assessment = segment_assessments.get(s.id) %}
+    <details class="border-t border-slate-100">
+      <summary class="cursor-pointer list-none px-3 py-2.5 flex items-center justify-between text-xs font-medium text-slate-600">
+        <span class="inline-flex items-center gap-1.5"><i data-lucide="clipboard-check" class="w-3.5 h-3.5 text-violet-500"></i>Оценка упражнения</span>
+        {% if segment_assessment %}<span class="text-[11px] text-emerald-600">сохранена</span>{% else %}<i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>{% endif %}
+      </summary>
+      <form action="/assessments/segments/{{ s.id }}" method="post" class="border-t border-slate-100 p-3 space-y-3">
+        <div class="grid grid-cols-5 gap-1.5">
+          {% for field, label in assessment_criteria %}
+          <label class="text-[10px] text-slate-400 truncate" title="{{ label }}">{{ label }}
+            <select name="{{ field }}" class="mt-1 w-full text-xs border border-slate-200 rounded px-1.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-200">
+              <option value="">—</option>
+              {% for score in range(1, 6) %}<option value="{{ score }}" {% if segment_assessment and segment_assessment|attr(field) == score %}selected{% endif %}>{{ score }}</option>{% endfor %}
+            </select>
+          </label>
+          {% endfor %}
+        </div>
+        <textarea name="comment" rows="2" maxlength="3000" placeholder="Комментарий по упражнению"
+                  class="w-full text-xs text-slate-600 border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ segment_assessment.comment if segment_assessment and segment_assessment.comment else '' }}</textarea>
+        <button class="inline-flex items-center gap-1 rounded-md bg-violet-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-violet-500"><i data-lucide="save" class="w-3.5 h-3.5"></i>Сохранить оценку</button>
+      </form>
+    </details>
+    {% endif %}
+    {% set segment_exercise = segment_exercises.get(s.id) %}
+    {% set exercise = exercise_by_id.get(segment_exercise.exercise_id) if segment_exercise else none %}
+    {% set comparison = comparisons.get(s.id) %}
+    <details class="border-t border-slate-100" {% if segment_exercise %}open{% endif %}>
+      <summary class="cursor-pointer list-none px-3 py-2.5 flex items-center justify-between text-xs font-medium text-slate-600">
+        <span class="inline-flex items-center gap-1.5"><i data-lucide="scan-search" class="w-3.5 h-3.5 text-violet-500"></i>Эталон и сравнение</span>
+        {% if exercise %}
+        <span class="text-[11px] {{ 'text-emerald-600' if exercise.reference_segment_id == s.id else 'text-violet-600' }}">{{ 'эталон' if exercise.reference_segment_id == s.id else exercise.name }}</span>
+        {% else %}
+        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
+        {% endif %}
+      </summary>
+      <div class="border-t border-slate-100 p-3 space-y-3">
+        <form action="/exercises/segments/{{ s.id }}" method="post" class="flex items-end gap-2">
+          <label class="text-[11px] text-slate-400 flex-1">Упражнение
+            <select name="exercise_id" class="mt-1 w-full text-xs border border-slate-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-200">
+              <option value="">Не назначено</option>
+              {% for item in exercises %}
+              <option value="{{ item.id }}" {% if segment_exercise and segment_exercise.exercise_id == item.id %}selected{% endif %}>{{ item.name }}{{ ' · архив' if item.status.value == 'archived' else '' }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button class="inline-flex items-center gap-1 rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800"><i data-lucide="save" class="w-3.5 h-3.5"></i>Назначить</button>
+        </form>
+        {% if exercise %}
+        <div class="flex flex-wrap items-center gap-2">
+          {% if exercise.reference_segment_id == s.id %}
+          <span class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i>Эталон упражнения</span>
+          {% else %}
+          <form action="/exercises/{{ exercise.id }}/reference/{{ s.id }}" method="post" onsubmit="return confirm('Назначить этот сегмент новым эталоном? Предыдущие сравнения будут удалены.')">
+            <button class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i>Сделать эталоном</button>
+          </form>
+          {% if exercise.reference_segment_id %}
+          <form action="/exercises/segments/{{ s.id }}/compare" method="post">
+            <button class="inline-flex items-center gap-1 rounded-md bg-violet-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-violet-500"><i data-lucide="scan-search" class="w-3.5 h-3.5"></i>Сравнить</button>
+          </form>
+          {% endif %}
+          {% endif %}
+        </div>
+        {% if not exercise.reference_segment_id %}
+        <p class="text-[11px] text-amber-600">Назначьте один качественный повтор эталоном, затем сравнивайте остальные сегменты.</p>
+        {% elif exercise.reference_segment_id != s.id and comparison and comparison.exercise_id == exercise.id and comparison.reference_segment_id == exercise.reference_segment_id %}
+        <div class="rounded-md border border-violet-100 bg-violet-50/60 p-3">
+          <div class="flex items-end justify-between gap-3">
+            <div><p class="text-[10px] uppercase tracking-wide text-violet-500 font-semibold">Сходство движения</p><p class="mt-0.5 text-2xl font-semibold text-slate-900">{{ '%.1f'|format(comparison.score) }}<span class="text-sm text-slate-400">%</span></p></div>
+            <div class="text-right"><p class="text-[10px] uppercase tracking-wide text-slate-400">Сходство темпа</p><p class="mt-0.5 text-lg font-semibold text-slate-700">{{ '%.1f'|format(comparison.tempo_score) }}%</p></div>
+          </div>
+          <div class="mt-2 flex flex-wrap gap-1">
+            {% for key, label in comparison_features %}
+            {% set feature = comparison.feature_scores.get(key) %}
+            {% if feature %}<span class="rounded bg-white border border-violet-100 px-1.5 py-0.5 text-[10px] text-slate-500" title="Среднее отклонение: {{ feature.mean_abs }}°">{{ label }} {{ '%.0f'|format(feature.score) }}%</span>{% endif %}
+            {% endfor %}
+          </div>
+          <p class="mt-2 text-[10px] text-slate-400">Результат по {{ comparison.sample_count }} отсчётам · {{ comparison.computed_at.strftime('%d.%m.%Y %H:%M') if comparison.computed_at else '' }}</p>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </details>
+
+    <div class="border-t border-slate-100 bg-slate-50/60 p-2.5 flex flex-wrap items-center gap-2">
+      {% if s.end_sec - s.start_sec >= 2 %}
+      {% set midpoint = (s.start_sec + s.end_sec) / 2 %}
+      <form action="/{{ video.id }}/segments/{{ s.id }}/split" method="post" class="flex items-center gap-1">
+        <label for="split-{{ s.id }}" class="sr-only">Точка разделения</label>
+        <input id="split-{{ s.id }}" name="at_sec" type="number" step="0.1"
+               min="{{ s.start_sec + 1 }}" max="{{ s.end_sec - 1 }}" value="{{ '%.2f'|format(midpoint) }}"
+               class="w-20 text-xs text-slate-600 border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-200">
+        <button class="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-violet-600 px-1.5 py-1"
+                title="Разделить сегмент">
+          <i data-lucide="scissors" class="w-3.5 h-3.5"></i> Разделить
+        </button>
+      </form>
+      {% endif %}
+      {% if not loop.last %}
+      <form action="/{{ video.id }}/segments/{{ s.id }}/merge-next" method="post">
+        <button class="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-violet-600 px-1.5 py-1"
+                title="Объединить со следующим сегментом">
+          <i data-lucide="combine" class="w-3.5 h-3.5"></i> Объединить
+        </button>
+      </form>
+      {% endif %}
+      {% if video.segments|length > 1 and request.state.principal.role == "owner" %}
+      <form action="/{{ video.id }}/segments/{{ s.id }}/delete" method="post" class="ml-auto"
+            onsubmit="return confirm('Удалить сегмент? Его время будет передано соседнему сегменту.')">
+        <button class="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-700 px-1.5 py-1"
+                title="Удалить сегмент">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Удалить
+        </button>
+      </form>
+      {% endif %}
     </div>
-  </form>
+  </article>
   {% else %}
   <p class="text-slate-400 text-sm col-span-full">Сегменты ещё не готовы.</p>
   {% endfor %}
 </div>
+{% if public_url %}
+<script>
+  async function copyText(value) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = value;
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      const copied = document.execCommand("copy");
+      field.remove();
+      return copied;
+    }
+  }
+
+  const copyPublicLink = document.getElementById("copy-public-link");
+  copyPublicLink?.addEventListener("click", async () => {
+    const copied = await copyText(copyPublicLink.dataset.url);
+    const label = copyPublicLink.querySelector("span");
+    label.textContent = copied ? "Ссылка скопирована" : "Не удалось скопировать";
+    setTimeout(() => { label.textContent = "Копировать ссылку"; }, 1800);
+  });
+</script>
+{% endif %}
 {% endif %}
 {% endblock %}

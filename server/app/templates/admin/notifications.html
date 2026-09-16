@@ -1,0 +1,41 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold">Уведомления</h1>
+    <p class="mt-0.5 text-xs text-slate-400">Новые результаты учеников и изменения тренировок.</p>
+  </div>
+  {% if request.state.principal.unread_notifications %}
+  <form action="/notifications/read-all" method="post">
+    <button class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+      <i data-lucide="check-check" class="h-3.5 w-3.5"></i>Отметить всё прочитанным
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+{% if notifications %}
+<div class="max-w-4xl overflow-hidden rounded-lg border border-slate-200 bg-white">
+  {% for item in notifications %}
+  <a href="{{ item.url }}" class="flex gap-3 border-b border-slate-100 p-4 last:border-0 hover:bg-slate-50 {{ 'bg-violet-50/40' if not item.read_at else '' }}">
+    <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {{ 'bg-violet-100 text-violet-700' if not item.read_at else 'bg-slate-100 text-slate-500' }}">
+      <i data-lucide="{{ 'clipboard-check' if item.event.value == 'assignment_submitted' else 'bell' }}" class="h-4 w-4"></i>
+    </div>
+    <div class="min-w-0 flex-1">
+      <div class="flex items-start justify-between gap-3">
+        <p class="text-sm font-medium text-slate-800">{{ item.title }}</p>
+        {% if not item.read_at %}<span class="mt-1 h-2 w-2 shrink-0 rounded-full bg-violet-500" aria-label="Непрочитано"></span>{% endif %}
+      </div>
+      <p class="mt-1 text-sm text-slate-500">{{ item.body }}</p>
+      <p class="mt-1.5 text-[11px] text-slate-400">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="max-w-4xl rounded-lg border border-dashed border-slate-200 bg-white py-14 text-center">
+  <i data-lucide="bell-off" class="mx-auto h-7 w-7 text-slate-300"></i>
+  <p class="mt-2 text-sm text-slate-500">Уведомлений пока нет.</p>
+</div>
+{% endif %}
+{% endblock %}

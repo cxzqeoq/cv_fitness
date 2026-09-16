@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Уведомления · CV Fitness</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+<header class="border-b border-white/10 bg-slate-950/95">
+  <div class="mx-auto flex h-16 max-w-4xl items-center justify-between gap-3 px-4 sm:px-6">
+    <a href="/student" class="inline-flex items-center gap-2 text-sm text-slate-300 hover:text-white">
+      <i data-lucide="arrow-left" class="h-4 w-4"></i>Мои тренировки
+    </a>
+    <div class="flex items-center gap-2"><span class="h-6 w-6 rounded bg-violet-500"></span><span class="text-sm font-semibold">cv.fitness</span></div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-4xl px-4 py-7 sm:px-6 sm:py-10">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div>
+      <p class="text-xs font-medium uppercase tracking-wide text-violet-400">Личный кабинет</p>
+      <h1 class="mt-1 text-2xl font-semibold">Уведомления</h1>
+      <p class="mt-1 text-sm text-slate-400">Назначения, ответы тренера и завершённые тренировки.</p>
+    </div>
+    {% if principal.unread_notifications %}
+    <form action="/student/notifications/read-all" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-white/5">
+        <i data-lucide="check-check" class="h-3.5 w-3.5"></i>Отметить всё прочитанным
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if notifications %}
+  <div class="mt-6 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+    {% for item in notifications %}
+    {% set icon = {'assignment_created': 'calendar-plus', 'trainer_replied': 'message-square', 'assignment_completed': 'circle-check', 'assignment_reopened': 'rotate-ccw'} %}
+    <a href="{{ item.url }}" class="flex gap-3 border-b border-white/10 p-4 last:border-0 hover:bg-white/[0.03] {{ 'bg-violet-500/[0.06]' if not item.read_at else '' }}">
+      <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {{ 'bg-violet-500/15 text-violet-300' if not item.read_at else 'bg-white/5 text-slate-500' }}">
+        <i data-lucide="{{ icon.get(item.event.value, 'bell') }}" class="h-4 w-4"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-start justify-between gap-3">
+          <p class="text-sm font-medium text-slate-100">{{ item.title }}</p>
+          {% if not item.read_at %}<span class="mt-1 h-2 w-2 shrink-0 rounded-full bg-violet-400" aria-label="Непрочитано"></span>{% endif %}
+        </div>
+        <p class="mt-1 text-sm text-slate-400">{{ item.body }}</p>
+        <p class="mt-1.5 text-[11px] text-slate-600">{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="mt-6 rounded-xl border border-dashed border-white/10 py-14 text-center">
+    <i data-lucide="bell-off" class="mx-auto h-7 w-7 text-slate-700"></i>
+    <p class="mt-2 text-sm text-slate-400">Уведомлений пока нет.</p>
+  </div>
+  {% endif %}
+</main>
+<script>lucide.createIcons();</script>
+</body>
+</html>

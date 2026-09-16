@@ -1,0 +1,111 @@
+{% extends "admin/base.html" %}
+{% block student_breadcrumb %}<span class="text-slate-300">/</span><span class="text-slate-900 font-medium truncate">{{ student.name }}</span>{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
+  <div class="flex items-center gap-3 min-w-0">
+    <div class="w-11 h-11 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-sm font-semibold shrink-0">{{ student.name[:2]|upper }}</div>
+    <div class="min-w-0">
+      <div class="flex items-center gap-2">
+        <h1 class="text-lg font-semibold truncate">{{ student.name }}</h1>
+        <span class="rounded-full px-2 py-0.5 text-xs font-medium {{ 'bg-emerald-50 text-emerald-600' if student.status.value == 'active' else 'bg-slate-100 text-slate-500' }}">{{ 'активен' if student.status.value == 'active' else 'архив' }}</span>
+      </div>
+      <p class="text-xs text-slate-400 mt-0.5">Карточка ученика и история тренировок</p>
+    </div>
+  </div>
+  <div class="flex flex-wrap items-center gap-2">
+    <a href="/students/{{ student.id }}/progress" class="inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500">
+      <i data-lucide="chart-no-axes-column-increasing" class="w-4 h-4"></i>Аналитика
+    </a>
+    <form action="/students/{{ student.id }}/archive" method="post">
+      <button class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+        <i data-lucide="{{ 'archive-restore' if student.status.value == 'archived' else 'archive' }}" class="w-4 h-4"></i>
+        {{ 'Восстановить' if student.status.value == 'archived' else 'В архив' }}
+      </button>
+    </form>
+  </div>
+</div>
+
+{% if error %}<div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex gap-2 text-sm text-red-700" role="alert"><i data-lucide="circle-alert" class="w-4 h-4 mt-0.5"></i><span>{{ error }}</span></div>{% endif %}
+{% if notice %}<div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex gap-2 text-sm text-emerald-700" role="status"><i data-lucide="circle-check" class="w-4 h-4 mt-0.5"></i><span>{{ notice }}</span></div>{% endif %}
+
+<div class="grid grid-cols-2 gap-3 mb-5 max-w-4xl sm:grid-cols-4">
+  <div class="rounded-lg border border-slate-200 bg-white p-4"><p class="text-xs text-slate-400">Тренировок</p><p class="text-xl font-semibold mt-1">{{ history|length }}</p></div>
+  <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-4"><p class="text-xs text-amber-600">На проверке</p><p class="text-xl font-semibold mt-1 text-amber-700">{{ submitted_count }}</p></div>
+  <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4"><p class="text-xs text-emerald-600">Завершено</p><p class="text-xl font-semibold mt-1 text-emerald-700">{{ completed_count }}</p></div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4"><p class="text-xs text-slate-400">Средний балл</p><p class="text-xl font-semibold mt-1">{{ average_score if average_score is not none else '—' }}{% if average_score is not none %}<span class="text-xs text-slate-400 font-normal"> / 5</span>{% endif %}</p></div>
+</div>
+
+<details class="mb-5 max-w-5xl rounded-lg border border-slate-200 bg-white">
+  <summary class="cursor-pointer list-none px-4 py-3 flex items-center justify-between text-sm font-medium text-slate-700">
+    <span class="inline-flex items-center gap-2"><i data-lucide="user-round-pen" class="w-4 h-4 text-violet-600"></i>Данные ученика</span>
+    <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
+  </summary>
+  <form action="/students/{{ student.id }}" method="post" class="border-t border-slate-100 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <label class="text-xs text-slate-500">Имя и фамилия<input name="name" required maxlength="120" value="{{ student.name }}" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200"></label>
+    <label class="text-xs text-slate-500">Телефон<input name="phone" maxlength="50" value="{{ student.phone or '' }}" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200"></label>
+    <label class="text-xs text-slate-500">Email<input name="email" type="email" maxlength="320" value="{{ student.email or '' }}" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200"></label>
+    <label class="text-xs text-slate-500">Дата рождения<input name="birth_date" type="date" value="{{ student.birth_date.isoformat() if student.birth_date else '' }}" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200"></label>
+    <label class="text-xs text-slate-500 sm:col-span-2 lg:col-span-3">Заметки<textarea name="notes" rows="3" maxlength="5000" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ student.notes or '' }}</textarea></label>
+    <div class="flex items-end"><button class="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"><i data-lucide="save" class="w-4 h-4"></i>Сохранить</button></div>
+  </form>
+</details>
+
+<div class="flex items-center justify-between mb-3">
+  <div><h2 class="text-sm font-semibold text-slate-800">Тренировки и обратная связь</h2><p class="text-xs text-slate-400 mt-0.5">Результаты ученика, комментарии и завершение назначений.</p></div>
+  <a href="/" class="inline-flex items-center gap-1.5 text-xs font-medium text-violet-600 hover:text-violet-500"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Выбрать видео</a>
+</div>
+
+{% if history %}
+<div class="space-y-3 max-w-5xl">
+  {% for item in history %}
+  {% set workflow_status = item.assignment.status.value %}
+  {% set status_label = {'assigned': 'назначено', 'in_progress': 'в работе', 'submitted': 'на проверке', 'completed': 'завершено'} %}
+  {% set status_class = {'assigned': 'bg-slate-100 text-slate-600', 'in_progress': 'bg-violet-50 text-violet-700', 'submitted': 'bg-amber-50 text-amber-700', 'completed': 'bg-emerald-50 text-emerald-700'} %}
+  <article class="rounded-lg border {{ 'border-amber-200' if workflow_status == 'submitted' else 'border-slate-200' }} bg-white overflow-hidden">
+    <div class="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center gap-2">
+          <a href="/{{ item.video.id }}" class="font-medium text-slate-800 hover:text-violet-600">{{ item.assignment.exercise_name or item.video.original_name }}</a>
+          <span class="rounded-full px-2 py-0.5 text-[11px] font-medium {{ status_class[workflow_status] }}">{{ status_label[workflow_status] }}</span>
+        </div>
+        <p class="mt-1 text-xs text-slate-400">{{ item.assignment.training_date.strftime("%d.%m.%Y") if item.assignment.training_date else item.video.created_at.strftime("%d.%m.%Y") }} · {{ item.video.original_name }}</p>
+      </div>
+      {% if item.average is not none %}<span class="shrink-0 text-sm font-semibold text-violet-700">{{ item.average }} <span class="text-xs font-normal text-slate-400">/ 5</span></span>{% endif %}
+    </div>
+    <div class="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,1fr)]">
+      <div>
+        <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">Ответ ученика</p>
+        {% if item.assignment.student_comment %}
+        <p class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ item.assignment.student_comment }}</p>
+        {% elif workflow_status == "assigned" %}
+        <p class="mt-2 text-sm text-slate-400">Ученик ещё не начал тренировку.</p>
+        {% elif workflow_status == "in_progress" %}
+        <p class="mt-2 text-sm text-slate-400">Тренировка выполняется, результат ещё не отправлен.</p>
+        {% else %}
+        <p class="mt-2 text-sm text-slate-400">Комментарий не оставлен.</p>
+        {% endif %}
+        {% if item.assignment.submitted_at %}<p class="mt-2 text-[11px] text-slate-400">Отправлено {{ item.assignment.submitted_at.strftime("%d.%m.%Y %H:%M") }}</p>{% endif %}
+      </div>
+      <form action="/students/videos/{{ item.video.id }}/review" method="post">
+        <label class="text-[11px] font-medium uppercase tracking-wide text-slate-400">Комментарий тренера
+          <textarea name="coach_comment" maxlength="3000" rows="3" placeholder="Обратная связь по выполнению"
+                    class="mt-1.5 w-full rounded-md border border-slate-200 px-3 py-2 text-sm normal-case tracking-normal text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-200">{{ item.assignment.coach_comment or "" }}</textarea>
+        </label>
+        <div class="mt-2 flex flex-wrap justify-end gap-2">
+          <button name="action" value="save" class="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"><i data-lucide="save" class="w-3.5 h-3.5"></i>Сохранить</button>
+          {% if workflow_status == "submitted" %}
+          <button name="action" value="reopen" class="inline-flex items-center gap-1.5 rounded-md border border-violet-200 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>Вернуть в работу</button>
+          <button name="action" value="complete" class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"><i data-lucide="check" class="w-3.5 h-3.5"></i>Завершить</button>
+          {% elif workflow_status == "completed" %}
+          <button name="action" value="reopen" class="inline-flex items-center gap-1.5 rounded-md border border-violet-200 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>Вернуть в работу</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<div class="rounded-lg border border-dashed border-slate-200 bg-white py-12 text-center"><i data-lucide="video" class="w-7 h-7 text-slate-300 mx-auto"></i><p class="mt-2 text-sm text-slate-500">У ученика пока нет тренировок.</p><p class="mt-1 text-xs text-slate-400">Откройте готовое видео и привяжите его к этой карточке.</p></div>
+{% endif %}
+{% endblock %}

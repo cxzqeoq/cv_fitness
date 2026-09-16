@@ -1,0 +1,79 @@
+{% extends "admin/base.html" %}
+{% block student_breadcrumb %}<span class="text-slate-300">/</span><a href="/students/{{ student.id }}" class="hover:text-slate-900 truncate">{{ student.name }}</a><span class="text-slate-300">/</span><span class="text-slate-900 font-medium">Прогресс</span>{% endblock %}
+{% block content %}
+<div class="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+  <div>
+    <a href="/students/{{ student.id }}" class="mb-2 inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-500"><i data-lucide="arrow-left" class="h-3.5 w-3.5"></i>Карточка ученика</a>
+    <h1 class="text-xl font-semibold">Прогресс · {{ student.name }}</h1>
+    <p class="mt-1 text-sm text-slate-400">Динамика финальных оценок тренера по тренировкам и критериям.</p>
+  </div>
+  <form method="get" class="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:flex-row sm:items-end">
+    <label class="text-xs text-slate-500">Период
+      <select name="period" class="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm sm:w-36">
+        {% for value, options in report.periods.items() %}<option value="{{ value }}" {% if report.period == value %}selected{% endif %}>{{ options[0] }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="text-xs text-slate-500">Упражнение
+      <select name="exercise" class="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm sm:w-56">
+        <option value="">Все упражнения</option>
+        {% for option in report.exercise_options %}<option value="{{ option }}" {% if report.exercise == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-800">Применить</button>
+  </form>
+</div>
+
+{% if report.count %}
+<div class="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+  <div class="rounded-lg border border-slate-200 bg-white p-4"><p class="text-xs text-slate-400">Последняя оценка</p><p class="mt-1 text-2xl font-semibold">{{ report.latest_average }}<span class="text-xs font-normal text-slate-400"> / 5</span></p></div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4"><p class="text-xs text-slate-400">Изменение</p><p class="mt-1 text-2xl font-semibold {{ 'text-emerald-600' if report.trend_delta and report.trend_delta > 0 else 'text-red-500' if report.trend_delta and report.trend_delta < 0 else 'text-slate-700' }}">{% if report.trend_delta is not none %}{{ '+' if report.trend_delta > 0 else '' }}{{ report.trend_delta }}{% else %}—{% endif %}</p></div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4"><p class="text-xs text-slate-400">Оценённых тренировок</p><p class="mt-1 text-2xl font-semibold">{{ report.count }}</p></div>
+  <div class="rounded-lg border border-slate-200 bg-white p-4"><p class="text-xs text-slate-400">Средний балл</p><p class="mt-1 text-2xl font-semibold">{{ report.average }}<span class="text-xs font-normal text-slate-400"> / 5</span></p></div>
+</div>
+
+<div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
+  <section class="rounded-lg border border-slate-200 bg-white p-5">
+    <div class="flex items-start justify-between gap-3"><div><h2 class="text-sm font-semibold text-slate-800">Динамика средней оценки</h2><p class="mt-0.5 text-xs text-slate-400">{{ report.period_label }}{% if report.exercise %} · {{ report.exercise }}{% endif %}</p></div><span class="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">{{ report.count }} точек</span></div>
+    <div class="mt-5 grid grid-cols-[28px_minmax(0,1fr)] gap-2">
+      <div class="flex h-64 flex-col justify-between pb-1 text-right text-[10px] text-slate-400"><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span></div>
+      <div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="h-64 w-full overflow-visible" role="img" aria-label="График средней оценки">
+          {% for y in [0,25,50,75,100] %}<line x1="0" y1="{{ y }}" x2="100" y2="{{ y }}" stroke="#e2e8f0" stroke-width="0.5" vector-effect="non-scaling-stroke" />{% endfor %}
+          {% if report.points|length > 1 %}<polyline points="{{ report.polyline }}" fill="none" stroke="#8b5cf6" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />{% endif %}
+          {% for point in report.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="2" fill="#8b5cf6" vector-effect="non-scaling-stroke"><title>{{ point.date.strftime('%d.%m.%Y') }} · {{ point.exercise }} · {{ point.average }}</title></circle>{% endfor %}
+        </svg>
+        <div class="mt-2 flex justify-between text-[10px] text-slate-400"><span>{{ report.points[0].date.strftime('%d.%m.%Y') }}</span><span>{{ report.points[-1].date.strftime('%d.%m.%Y') }}</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rounded-lg border border-slate-200 bg-white p-5">
+    <h2 class="text-sm font-semibold text-slate-800">Критерии</h2>
+    <p class="mt-0.5 text-xs text-slate-400">Средние оценки за выбранный период.</p>
+    <div class="mt-5 space-y-4">
+      {% for criterion in report.criteria %}
+      <div>
+        <div class="mb-1.5 flex items-center justify-between gap-2"><span class="text-xs font-medium text-slate-600">{{ criterion.label }}</span><span class="text-xs font-semibold text-slate-800">{{ criterion.average if criterion.average is not none else '—' }}</span></div>
+        <div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-violet-500" style="width: {{ criterion.average / 5 * 100 if criterion.average is not none else 0 }}%"></div></div>
+        {% if criterion.delta is not none %}<p class="mt-1 text-[10px] {{ 'text-emerald-600' if criterion.delta > 0 else 'text-red-500' if criterion.delta < 0 else 'text-slate-400' }}">{{ '+' if criterion.delta > 0 else '' }}{{ criterion.delta }} к первой оценке</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% if report.best_criterion and report.focus_criterion %}<div class="mt-5 grid grid-cols-2 gap-2 border-t border-slate-100 pt-4 text-xs"><div><p class="text-slate-400">Сильная сторона</p><p class="mt-1 font-medium text-emerald-700">{{ report.best_criterion.label }}</p></div><div><p class="text-slate-400">Зона внимания</p><p class="mt-1 font-medium text-amber-700">{{ report.focus_criterion.label }}</p></div></div>{% endif %}
+  </section>
+</div>
+
+<div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+  <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <div class="border-b border-slate-100 px-4 py-3"><h2 class="text-sm font-semibold text-slate-800">По упражнениям</h2></div>
+    <div class="divide-y divide-slate-100">{% for item in report.exercises %}<div class="flex items-center justify-between gap-3 px-4 py-3"><div><p class="text-sm font-medium text-slate-700">{{ item.name }}</p><p class="mt-0.5 text-xs text-slate-400">{{ item.count }} тренировок</p></div><div class="text-right"><p class="text-sm font-semibold">{{ item.average }} / 5</p>{% if item.delta is not none %}<p class="text-[10px] {{ 'text-emerald-600' if item.delta > 0 else 'text-red-500' if item.delta < 0 else 'text-slate-400' }}">{{ '+' if item.delta > 0 else '' }}{{ item.delta }}</p>{% endif %}</div></div>{% endfor %}</div>
+  </section>
+  <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <div class="border-b border-slate-100 px-4 py-3"><h2 class="text-sm font-semibold text-slate-800">Последние оценки</h2></div>
+    <div class="divide-y divide-slate-100">{% for record in report.records[:8] %}<a href="/{{ record.video_id }}" class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50"><div><p class="text-sm font-medium text-slate-700">{{ record.exercise }}</p><p class="mt-0.5 text-xs text-slate-400">{{ record.date.strftime('%d.%m.%Y') }}</p></div><span class="text-sm font-semibold text-violet-700">{{ record.average|round(1) }} / 5</span></a>{% endfor %}</div>
+  </section>
+</div>
+{% else %}
+<div class="rounded-lg border border-dashed border-slate-200 bg-white py-16 text-center"><i data-lucide="chart-no-axes-column" class="mx-auto h-8 w-8 text-slate-300"></i><p class="mt-3 text-sm font-medium text-slate-600">Нет оценок за выбранный период</p><p class="mt-1 text-xs text-slate-400">Измените фильтр или опубликуйте итоговые оценки тренировок.</p></div>
+{% endif %}
+{% endblock %}

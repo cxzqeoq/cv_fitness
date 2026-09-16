@@ -349,6 +349,48 @@ def context_distance(windows, t, norms, ctx_sec=WINDOW):
     return change_distance(ml, mr, norms)
 
 
+def segment_signature(windows, start, end, pad=0):
+    """Return the median signature for windows inside a segment."""
+    selected = [w for w in windows if start - pad <= w["tMid"] <= end + pad]
+    return median_win(selected)
+
+
+def merge_similar_segments(segments, windows, norms, merge_thr=0.55, max_iter=20, pad=0):
+    """Merge the most similar adjacent pair until similarity drops below the threshold."""
+    if not segments or len(segments) < 2:
+        return segments
+    segs = [dict(segment) for segment in segments]
+    for _ in range(max_iter):
+        best_sim, best_idx = -1.0, -1
+        for i in range(len(segs) - 1):
+            sig_l = segment_signature(windows, segs[i]["start"], segs[i]["end"], pad)
+            sig_r = segment_signature(windows, segs[i + 1]["start"], segs[i + 1]["end"], pad)
+            if not sig_l or not sig_r:
+                continue
+            distance = change_distance(sig_l, sig_r, norms)["combined"]
+            if distance is None:
+                continue
+            similarity = 1 / (1 + distance)
+            if similarity > best_sim:
+                best_sim, best_idx = similarity, i
+        if best_idx < 0 or best_sim < merge_thr:
+            break
+        left, right = segs[best_idx], segs[best_idx + 1]
+        segs[best_idx:best_idx + 2] = [{
+            "n": left["n"],
+            "start": left["start"],
+            "end": right["end"],
+            "boundary": right["boundary"],
+            "conf": right["conf"],
+            "dom": right["dom"],
+        }]
+    for i, segment in enumerate(segs, start=1):
+        segment["n"] = i
+    return segs
+
+
+
+
 # ── candidates / segments ──
 def autothreshold(sig, pct_high=0.95, pct_low=0.7, channel="comb"):
     vals = [s[channel] for s in sig if s.get(channel) is not None and math.isfinite(s[channel])]
@@ -426,6 +468,43 @@ def detect_candidates_union(signal, frac=0.7, dup_sec=3, comb_pct=(0.95, 0.7), c
     return out
 
 
+def refine_candidates(cands, signal, min_prom=0.3, prom_window_sec=30,
+                      min_dist=12, min_conf=0.05, require_signal=True):
+    """Filter degenerate peaks by prominence, then apply distance-based NMS."""
+    if not cands:
+        return []
+    dt = signal[1]["t"] - signal[0]["t"] if len(signal) > 1 else 2
+    half_win = max(1, round(prom_window_sec / 2 / dt)) if dt > 0 else 1
+    comb_vals = [s.get("comb") if s.get("comb") is not None else 0 for s in signal]
+    index_by_time = {s["t"]: i for i, s in enumerate(signal)}
+
+    filtered = [
+        c for c in cands
+        if (c.get("conf") or 0) >= min_conf
+        and (not require_signal or c.get("Dm") is not None or c.get("Dp") is not None)
+    ]
+    prominent = []
+    for candidate in filtered:
+        idx = index_by_time.get(candidate["peakT"])
+        if idx is None:
+            prominent.append(candidate)
+            continue
+        left = comb_vals[max(0, idx - half_win):idx]
+        right = comb_vals[idx + 1:min(len(comb_vals), idx + half_win + 1)]
+        base = min(min(left, default=math.inf), min(right, default=math.inf))
+        if candidate["peak"] - base >= min_prom:
+            prominent.append(candidate)
+
+    out = []
+    for candidate in sorted(prominent, key=lambda c: c["conf"], reverse=True):
+        if any(abs(kept["boundary"] - candidate["boundary"]) < min_dist for kept in out):
+            continue
+        out.append(candidate)
+    return sorted(out, key=lambda c: c["boundary"])
+
+
+
+
 def _dominant(c):
     dm, dp = c["Dm"], c["Dp"]
     if dm is None and dp is None:
@@ -439,23 +518,70 @@ def _dominant(c):
     return "D_motion" if dm > dp else "D_pose"
 
 
-def segments_from_candidates(cands, duration, t0=0.0):
-    segs = []
+def segments_from_candidates(cands, duration, t0=0.0, min_seg_sec=0):
+    """Split the timeline and merge short segments through the weaker adjacent boundary."""
+    initial = []
     prev, n = t0, 1
-    for c in cands:
-        if c["boundary"] <= prev + 0.05:
+    for candidate in cands:
+        if candidate["boundary"] <= prev + 0.05:
             continue
-        segs.append({"n": n, "start": prev, "end": c["boundary"], "boundary": c["boundary"],
-                     "conf": c["conf"], "dom": _dominant(c)})
+        initial.append({
+            "n": n,
+            "start": prev,
+            "end": candidate["boundary"],
+            "boundary": candidate["boundary"],
+            "conf": candidate["conf"],
+            "dom": _dominant(candidate),
+        })
         n += 1
-        prev = c["boundary"]
-    if duration - prev > 0.05 or not segs:
-        segs.append({"n": n, "start": prev, "end": duration, "boundary": None, "conf": None, "dom": None})
+        prev = candidate["boundary"]
+    if duration - prev > 0.05 or not initial:
+        initial.append({
+            "n": n, "start": prev, "end": duration,
+            "boundary": None, "conf": None, "dom": None,
+        })
+    if not (min_seg_sec > 0):
+        return initial
+
+    segs = [dict(segment) for segment in initial]
+    changed = True
+    while changed and len(segs) > 1:
+        changed = False
+        for i in range(len(segs)):
+            if segs[i]["end"] - segs[i]["start"] >= min_seg_sec:
+                continue
+            if i == len(segs) - 1:
+                segs[i - 1]["end"] = segs[i]["end"]
+                segs[i - 1]["boundary"] = segs[i]["boundary"]
+                segs[i - 1]["conf"] = segs[i]["conf"]
+                segs[i - 1]["dom"] = segs[i]["dom"]
+                del segs[i]
+            else:
+                left_conf = (segs[i - 1]["conf"] if i > 0 else None)
+                right_conf = segs[i]["conf"]
+                left_conf = left_conf if left_conf is not None else math.inf
+                right_conf = right_conf if right_conf is not None else math.inf
+                if right_conf <= left_conf:
+                    segs[i]["end"] = segs[i + 1]["end"]
+                    segs[i]["boundary"] = segs[i + 1]["boundary"]
+                    segs[i]["conf"] = segs[i + 1]["conf"]
+                    segs[i]["dom"] = segs[i + 1]["dom"]
+                    del segs[i + 1]
+                else:
+                    segs[i - 1]["end"] = segs[i]["end"]
+                    segs[i - 1]["boundary"] = segs[i]["boundary"]
+                    segs[i - 1]["conf"] = segs[i]["conf"]
+                    segs[i - 1]["dom"] = segs[i]["dom"]
+                    del segs[i]
+            changed = True
+            break
+    for i, segment in enumerate(segs, start=1):
+        segment["n"] = i
     return segs
 
 
 def segment_video(frames, duration, cfg=None):
-    """frames: [{time, desc}] (desc from frame_descriptors, or None). Returns segments list."""
+    """Build refined, minimum-length segments and merge adjacent matching patterns."""
     cfg = cfg or {}
     win, step, ctx = cfg.get("win", 5), cfg.get("step", 2), cfg.get("ctx", 5)
     frac, dup_sec = cfg.get("frac", 0.7), cfg.get("dupSec", 3)
@@ -463,13 +589,42 @@ def segment_video(frames, duration, cfg=None):
 
     windows = build_windows(frames, win, step)
     norms = mad_normalize(windows)
-    sig = []
-    for w in windows:
-        d = context_distance(windows, w["tMid"], norms, ctx) or {}
-        dm, dp = d.get("D_motion"), d.get("D_pose")
+    signal = []
+    for window in windows:
+        distance = context_distance(windows, window["tMid"], norms, ctx) or {}
+        dm, dp = distance.get("D_motion"), distance.get("D_pose")
         chg = max(dm or 0, dp or 0) if (dm is not None or dp is not None) else None
-        sig.append({"t": w["tMid"], "Dm": dm, "Dp": dp, "comb": d.get("combined"), "chg": chg})
+        signal.append({
+            "t": window["tMid"],
+            "Dm": dm,
+            "Dp": dp,
+            "comb": distance.get("combined"),
+            "chg": chg,
+        })
 
-    valid = sum(1 for f in frames if f.get("desc"))
-    cands = detect_candidates_union(sig, frac, dup_sec, comb_pct, chg_pct) if valid >= 10 else []
-    return segments_from_candidates(cands, duration)
+    valid = sum(1 for frame in frames if frame.get("desc"))
+    raw_candidates = (
+        detect_candidates_union(signal, frac, dup_sec, comb_pct, chg_pct)
+        if valid >= 10 else []
+    )
+    candidates = refine_candidates(
+        raw_candidates,
+        signal,
+        min_prom=cfg.get("minProm", 0.3),
+        prom_window_sec=cfg.get("promWindowSec", 30),
+        min_dist=cfg.get("minDist", 12),
+        min_conf=cfg.get("minConf", 0.05),
+    )
+    segments = segments_from_candidates(
+        candidates, duration, min_seg_sec=cfg.get("minSegSec", 8)
+    )
+    if cfg.get("mergeSimilar", True):
+        segments = merge_similar_segments(
+            segments,
+            windows,
+            norms,
+            merge_thr=cfg.get("mergeThr", 0.55),
+            max_iter=cfg.get("mergeMaxIter", 20),
+            pad=cfg.get("mergePad", 0),
+        )
+    return segments

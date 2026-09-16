@@ -598,15 +598,22 @@ export function segmentsFromCandidates(cands, duration, t0 = 0, minSegSec = 0){
   }
   if (!minSegSec || minSegSec <= 0) return initial;
 
-  const segs = initial.slice();
+  const segs = initial.map(s => ({ ...s }));
   let changed = true;
-  while (changed){
+  while (changed && segs.length > 1){
     changed = false;
-    for (let i = 0; i < segs.length - 1; i++){
-      if (segs[i].end - segs[i].start < minSegSec){
+    for (let i = 0; i < segs.length; i++){
+      if (segs[i].end - segs[i].start >= minSegSec) continue;
+      if (i === segs.length - 1){
+        segs[i - 1].end = segs[i].end;
+        segs[i - 1].boundary = segs[i].boundary;
+        segs[i - 1].conf = segs[i].conf;
+        segs[i - 1].dom = segs[i].dom;
+        segs.splice(i, 1);
+      } else {
         const leftConf = i > 0 ? (segs[i - 1].conf ?? Infinity) : Infinity;
-        const rightConf = segs[i + 1].conf ?? Infinity;
-        // объединяем с соседом, у которого conf меньше (менее значимая граница)
+        const rightConf = segs[i].conf ?? Infinity;
+        // Удаляем менее уверенную из границ непосредственно вокруг сегмента.
         if (rightConf <= leftConf){
           segs[i].end = segs[i + 1].end;
           segs[i].boundary = segs[i + 1].boundary;
@@ -620,9 +627,9 @@ export function segmentsFromCandidates(cands, duration, t0 = 0, minSegSec = 0){
           segs[i - 1].dom = segs[i].dom;
           segs.splice(i, 1);
         }
-        changed = true;
-        break;
       }
+      changed = true;
+      break;
     }
   }
   // перенумеровать

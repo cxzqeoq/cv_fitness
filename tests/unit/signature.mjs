@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { I } from "../../js/config.js";
 import {
   frameDescriptors, windowSignature, buildWindows, madNormalize,
-  contextDistance, medianWin, detectCandidates, segmentsFromCandidates, autothreshold
+  contextDistance, medianWin, detectCandidates, segmentsFromCandidates, autothreshold,
+  segmentSignature, mergeSimilarSegments, refineCandidates
 } from "../../js/signature.js";
 
 // ── синтетический скелет: стоит, руки вдоль тела ──
@@ -220,6 +221,70 @@ function plateau(peakT0, peakT1, peakVal, dur = 20){
   const none = segmentsFromCandidates([], 20);
   assert(none.length === 1 && none[0].end === 20 && none[0].boundary === null);
   console.log("10. сегменты: [0→8] с признаками, [8→20] хвост; без кандидатов — один до конца — OK");
+}
+
+// 11. Подпись сегмента строится по медиане попавших в него окон.
+{
+  const frames = buildFrames({ 0: "static", 12: "circle", 40: "static" }, 50, 5);
+  const wins = buildWindows(frames, 5, 2);
+  const sig = segmentSignature(wins, 0, 10);
+  assert(sig, "segmentSignature вернул null");
+  assert(typeof sig.torsoTilt === "object" && sig.torsoTilt.med != null);
+  assert.equal(segmentSignature(wins, 999, 1000), null);
+  console.log("11. segmentSignature — медиана окон сегмента — OK");
+}
+
+// 12. Похожие соседние паттерны сливаются, реальная смена движения остаётся.
+{
+  const frames = buildFrames({ 0: "circle", 8: "circle", 24: "static" }, 40, 5);
+  const wins = buildWindows(frames, 5, 2);
+  const norms = madNormalize(wins);
+  const cands = [
+    { boundary: 8, conf: 2, Dm: 1, Dp: 1 },
+    { boundary: 16, conf: 2, Dm: 1, Dp: 1 },
+    { boundary: 24, conf: 2, Dm: 1, Dp: 1 }
+  ];
+  const original = segmentsFromCandidates(cands, 40);
+  const merged = mergeSimilarSegments(original, wins, norms, { mergeThr: 0.3 });
+  assert(merged.length < original.length);
+  assert(merged.some(s => s.boundary === 24), "граница перехода в static потеряна");
+  console.log("12. mergeSimilarSegments — похожие сегменты слиты — OK");
+}
+
+// 13. Refinement удаляет нулевую уверенность и подавляет близкий слабый пик.
+{
+  const sig = [];
+  for (let t = 0; t <= 60; t++) sig.push({ t, comb: 0.2, Dm: 0, Dp: 0 });
+  for (let t = 18; t <= 26; t++) sig[t].comb = 0.2 + (t - 18) * 0.5;
+  for (let t = 26; t <= 30; t++) sig[t].comb = 2.2 - (t - 26) * 0.4;
+  sig[26].comb = 2.2;
+  const cands = [
+    { boundary: 5, peakT: 5, peak: 0.5, conf: 0, Dm: 1, Dp: 1 },
+    { boundary: 22, peakT: 22, peak: 1, conf: 0.8, Dm: 1, Dp: 1 },
+    { boundary: 26, peakT: 26, peak: 2.2, conf: 2, Dm: 1, Dp: 1 }
+  ];
+  const refined = refineCandidates(cands, sig);
+  assert.deepEqual(refined.map(c => c.boundary), [26]);
+  console.log("13. refineCandidates — prominence и NMS — OK");
+}
+
+// 14. Короткий средний сегмент удаляет менее уверенную соседнюю границу.
+{
+  const cands = [
+    { boundary: 20, conf: 0.9, Dm: 1, Dp: 1 },
+    { boundary: 24, conf: 0.2, Dm: 1, Dp: 1 },
+    { boundary: 60, conf: 1, Dm: 1, Dp: 1 }
+  ];
+  const segments = segmentsFromCandidates(cands, 80, 0, 8);
+  assert(segments.some(s => s.start === 20 && s.end === 60));
+  assert(!segments.some(s => s.boundary === 24), "слабая граница короткого сегмента сохранена");
+  const tail = segmentsFromCandidates([
+    { boundary: 20, conf: 0.9, Dm: 1, Dp: 1 },
+    { boundary: 74, conf: 0.2, Dm: 1, Dp: 1 }
+  ], 80, 0, 8);
+  assert(tail.some(s => s.start === 20 && s.end === 80));
+  assert(!tail.some(s => s.boundary === 74), "короткий хвост не слит влево");
+  console.log("14. minSegSec — удалена менее уверенная граница — OK");
 }
 
 console.log("\nВсе тесты signature.mjs прошли.");

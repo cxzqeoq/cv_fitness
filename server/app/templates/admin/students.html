@@ -1,0 +1,91 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
+  <div>
+    <h1 class="text-lg font-semibold">Ученики</h1>
+    <p class="text-xs text-slate-400 mt-0.5">Карточки, тренировки и динамика оценок.</p>
+  </div>
+  <form action="/students" method="get" class="flex flex-wrap items-center gap-2">
+    <input name="q" type="search" value="{{ q }}" placeholder="Имя, телефон или email"
+           class="text-sm bg-white border border-slate-200 rounded-md px-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-violet-200">
+    <select name="state" class="text-sm bg-white border border-slate-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-200">
+      <option value="active" {% if state == "active" %}selected{% endif %}>Активные</option>
+      <option value="archived" {% if state == "archived" %}selected{% endif %}>Архив</option>
+      <option value="all" {% if state == "all" %}selected{% endif %}>Все</option>
+    </select>
+    <button class="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800">
+      <i data-lucide="search" class="w-4 h-4"></i> Найти
+    </button>
+  </form>
+</div>
+
+{% if error %}
+<div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2 text-sm text-red-700" role="alert">
+  <i data-lucide="circle-alert" class="w-4 h-4 mt-0.5 shrink-0"></i><span>{{ error }}</span>
+</div>
+{% endif %}
+{% if notice %}
+<div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-2 text-sm text-emerald-700" role="status">
+  <i data-lucide="circle-check" class="w-4 h-4 mt-0.5 shrink-0"></i><span>{{ notice }}</span>
+</div>
+{% endif %}
+
+<details class="mb-5 rounded-lg border border-slate-200 bg-white" {% if not students and not q %}open{% endif %}>
+  <summary class="cursor-pointer list-none px-4 py-3 flex items-center justify-between text-sm font-medium text-slate-700">
+    <span class="inline-flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4 text-violet-600"></i>Добавить ученика</span>
+    <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
+  </summary>
+  <form action="/students" method="post" class="border-t border-slate-100 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <label class="text-xs text-slate-500">Имя и фамилия
+      <input name="name" required maxlength="120" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+    </label>
+    <label class="text-xs text-slate-500">Телефон
+      <input name="phone" maxlength="50" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+    </label>
+    <label class="text-xs text-slate-500">Email
+      <input name="email" type="email" maxlength="320" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+    </label>
+    <label class="text-xs text-slate-500">Дата рождения
+      <input name="birth_date" type="date" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+    </label>
+    <label class="text-xs text-slate-500 sm:col-span-2 lg:col-span-3">Заметки
+      <textarea name="notes" rows="2" maxlength="5000" class="mt-1 w-full text-sm border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200"></textarea>
+    </label>
+    <div class="flex items-end">
+      <button class="inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500">
+        <i data-lucide="plus" class="w-4 h-4"></i> Добавить
+      </button>
+    </div>
+  </form>
+</details>
+
+{% if students %}
+<div class="rounded-lg border border-slate-200 bg-white overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-400">
+      <tr><th class="px-4 py-2.5 font-medium">Ученик</th><th class="px-4 py-2.5 font-medium">Контакты</th><th class="px-4 py-2.5 font-medium">Тренировок</th><th class="px-4 py-2.5 font-medium">Статус</th></tr>
+    </thead>
+    <tbody>
+      {% for student in students %}
+      <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+        <td class="px-4 py-3">
+          <a href="/students/{{ student.id }}" class="flex items-center gap-3 text-slate-800 hover:text-violet-600">
+            <span class="w-9 h-9 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-semibold">{{ student.name[:2]|upper }}</span>
+            <span><span class="block font-medium">{{ student.name }}</span>{% if student.birth_date %}<span class="block text-xs text-slate-400 mt-0.5">{{ student.birth_date.strftime("%d.%m.%Y") }}</span>{% endif %}</span>
+          </a>
+        </td>
+        <td class="px-4 py-3 text-slate-500"><span class="block">{{ student.phone or "—" }}</span>{% if student.email %}<span class="block text-xs text-slate-400 mt-0.5">{{ student.email }}</span>{% endif %}</td>
+        <td class="px-4 py-3 text-slate-500">{{ counts.get(student.id, 0) }}</td>
+        <td class="px-4 py-3"><span class="rounded-full px-2 py-0.5 text-xs font-medium {{ 'bg-emerald-50 text-emerald-600' if student.status.value == 'active' else 'bg-slate-100 text-slate-500' }}">{{ 'активен' if student.status.value == 'active' else 'архив' }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="rounded-lg border border-dashed border-slate-200 bg-white py-12 text-center">
+  <i data-lucide="graduation-cap" class="w-8 h-8 text-slate-300 mx-auto"></i>
+  <p class="mt-2 text-sm text-slate-500">Ученики не найдены.</p>
+</div>
+{% endif %}
+{% endblock %}

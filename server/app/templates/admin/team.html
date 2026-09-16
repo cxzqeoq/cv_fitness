@@ -1,0 +1,144 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5">
+  <div>
+    <h1 class="text-lg font-semibold">Команда</h1>
+    <p class="text-xs text-slate-400 mt-0.5">
+      {{ members|length }} участников · {{ active_count }} активных
+    </p>
+  </div>
+</div>
+
+{% if error %}
+<div class="mb-4 max-w-3xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2 text-sm text-red-700" role="alert">
+  <i data-lucide="circle-alert" class="w-4 h-4 mt-0.5 shrink-0"></i>
+  <span>{{ error }}</span>
+</div>
+{% endif %}
+{% if notice %}
+<div class="mb-4 max-w-3xl rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-2 text-sm text-emerald-700" role="status">
+  <i data-lucide="circle-check" class="w-4 h-4 mt-0.5 shrink-0"></i>
+  <span>{{ notice }}</span>
+</div>
+{% endif %}
+
+<details class="mb-5 max-w-3xl rounded-lg border border-slate-200 bg-white" {% if not members %}open{% endif %}>
+  <summary class="cursor-pointer list-none px-4 py-3 flex items-center justify-between text-sm font-medium text-slate-700">
+    <span class="inline-flex items-center gap-2">
+      <i data-lucide="user-plus" class="w-4 h-4 text-violet-600"></i>
+      Добавить участника
+    </span>
+    <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400"></i>
+  </summary>
+  <form action="/team" method="post" class="border-t border-slate-100 p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <label class="text-xs text-slate-500">
+      Имя
+      <input name="name" required maxlength="100" placeholder="Имя и фамилия"
+             class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+    </label>
+    <label class="text-xs text-slate-500">
+      Email
+      <input name="email" type="email" required maxlength="320" placeholder="manager@example.com"
+             class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+    </label>
+    <label class="text-xs text-slate-500">
+      Роль
+      <select name="role" class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-200">
+        {% for role in roles %}
+        <option value="{{ role.value }}" {% if not members and role.value == "owner" %}selected{% endif %}
+                {% if not members and role.value != "owner" %}disabled{% endif %}>{{ role_labels[role] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="flex items-end">
+      <button class="inline-flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-md px-3.5 py-2">
+        <i data-lucide="plus" class="w-4 h-4"></i> Добавить
+      </button>
+    </div>
+  </form>
+</details>
+
+{% if members %}
+<div class="max-w-5xl space-y-3">
+  {% for member in members %}
+  <form id="member-{{ member.id }}" action="/team/{{ member.id }}" method="post"
+        class="rounded-lg border border-slate-200 bg-white p-4 scroll-mt-6">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start">
+      <div class="flex items-center gap-3 lg:w-56 shrink-0">
+        <div class="w-10 h-10 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center text-sm font-semibold shrink-0">
+          {{ member.name[:2]|upper }}
+        </div>
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-slate-800 truncate">{{ member.name }}</p>
+          <p class="text-xs text-slate-400">Добавлен {{ member.created_at.strftime("%d.%m.%Y") if member.created_at else "—" }}</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1.4fr_180px] gap-3 flex-1">
+        <label class="text-xs text-slate-500">
+          Имя
+          <input name="name" required maxlength="100" value="{{ member.name }}"
+                 class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+        </label>
+        <label class="text-xs text-slate-500">
+          Email
+          <input name="email" type="email" required maxlength="320" value="{{ member.email }}"
+                 class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-200">
+        </label>
+        <label class="text-xs text-slate-500">
+          Роль
+          <select name="role" class="mt-1 w-full text-sm text-slate-700 border border-slate-200 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-200">
+            {% for role in roles %}
+            <option value="{{ role.value }}" {% if member.role == role %}selected{% endif %}>{{ role_labels[role] }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3">
+      <label class="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+        <input name="is_active" type="checkbox" {% if member.is_active %}checked{% endif %}
+               class="rounded border-slate-300 text-violet-600 focus:ring-violet-200">
+        Активен
+      </label>
+      {% if member.role.value == "owner" and member.is_active and active_owner_count == 1 %}
+      <span class="inline-flex items-center gap-1 text-[11px] text-amber-600">
+        <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Последний активный владелец
+      </span>
+      {% endif %}
+      <div class="ml-auto flex items-center gap-2">
+        <button class="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-md px-3 py-1.5 text-xs font-medium">
+          <i data-lucide="save" class="w-3.5 h-3.5"></i> Сохранить
+        </button>
+        <button type="submit" formaction="/team/{{ member.id }}/delete" formmethod="post" formnovalidate
+                onclick="return confirm('Удалить участника из команды?')"
+                class="inline-flex items-center gap-1.5 border border-red-200 hover:bg-red-50 text-red-600 rounded-md px-3 py-1.5 text-xs font-medium">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Удалить
+        </button>
+      </div>
+    </div>
+  </form>
+  {% endfor %}
+</div>
+{% else %}
+<div class="max-w-3xl rounded-lg border border-dashed border-slate-200 bg-white py-12 text-center">
+  <i data-lucide="users" class="w-7 h-7 text-slate-300 mx-auto"></i>
+  <p class="mt-2 text-sm text-slate-500">Команда пока пустая.</p>
+  <p class="mt-1 text-xs text-slate-400">Добавьте первого владельца через форму выше.</p>
+</div>
+{% endif %}
+
+<section class="mt-6 max-w-5xl">
+  <div class="mb-3"><h2 class="text-sm font-semibold text-slate-800">Журнал действий</h2><p class="text-xs text-slate-400 mt-0.5">Последние 50 изменений, выполненных командой и учениками.</p></div>
+  {% if audit_events %}
+  <div class="rounded-lg border border-slate-200 bg-white overflow-x-auto">
+    <table class="w-full text-sm"><thead class="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th class="px-4 py-2.5 font-medium">Время</th><th class="px-4 py-2.5 font-medium">Кто</th><th class="px-4 py-2.5 font-medium">Действие</th><th class="px-4 py-2.5 font-medium">Результат</th></tr></thead><tbody>
+      {% for event in audit_events %}<tr class="border-b border-slate-100 last:border-0"><td class="px-4 py-2.5 text-xs text-slate-400 whitespace-nowrap">{{ event.created_at.strftime('%d.%m.%Y %H:%M') }}</td><td class="px-4 py-2.5 text-slate-700">{{ actor_labels[event.id] }}</td><td class="px-4 py-2.5"><span class="text-xs font-medium text-slate-500">{{ event.action }}</span><span class="ml-2 text-xs text-slate-400 break-all">{{ event.path }}</span></td><td class="px-4 py-2.5"><span class="rounded-full px-2 py-0.5 text-xs font-medium {{ 'bg-emerald-50 text-emerald-600' if event.status_code < 400 else 'bg-red-50 text-red-600' }}">{{ event.status_code }}</span></td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  {% else %}
+  <div class="rounded-lg border border-dashed border-slate-200 bg-white py-8 text-center text-sm text-slate-400">Журнал пока пуст.</div>
+  {% endif %}
+</section>
+{% endblock %}

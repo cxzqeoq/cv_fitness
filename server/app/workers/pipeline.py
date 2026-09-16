@@ -7,7 +7,9 @@ segmentation) - see that file's docstring for the algorithm.
 """
 
 import json
+import shutil
 from pathlib import Path
+from threading import Lock
 
 import cv2
 import mediapipe as mp
@@ -15,12 +17,13 @@ import mediapipe as mp
 from ..config import TRACKS_DIR, THUMBS_DIR
 from ..db import SessionLocal
 from ..models import Video, Segment, VideoStatus
+from ..settings_store import get_app_settings
 from . import signature as sig
 
 mp_pose = mp.solutions.pose
 
-TARGET_SAMPLE_FPS = 12  # detect on a subsampled stream; overlay still lerps fine at this rate
 PROGRESS_EVERY = 25  # commit progress every N processed frames
+_PROCESS_LOCK = Lock()
 
 # Overlay track keeps only the points the 2D skeleton renderer draws (no z, no
 # face/finger/heel points) - this is what actually kills the payload: full 33
@@ -30,7 +33,7 @@ TRACK_LM = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
 
 
 def extract_track(video_path: Path, video_id: int, db):
-    """Sample the video at ~TARGET_SAMPLE_FPS and run MediaPipe Pose on each sample.
+    """Sample the video at the configured rate and run MediaPipe Pose on each sample.
 
     Returns (frames, sig_frames, duration_sec, source_fps). `frames[i].t` is
     the real timestamp in seconds, so the client player can still line up
@@ -39,11 +42,12 @@ def extract_track(video_path: Path, video_id: int, db):
     (image-space landmarks aren't camera-angle invariant, so segmentation
     uses the separate world-landmark output MediaPipe already computes).
     """
+    settings = get_app_settings(db)
     cap = cv2.VideoCapture(str(video_path))
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    step = max(1, round(src_fps / TARGET_SAMPLE_FPS))
-    sampled_total = (total // step) + 1 if total else 0
+    step = max(1, round(src_fps / settings.target_sample_fps))
+    sampled_total = (total + step - 1) // step if total else 0
 
     video = db.get(Video, video_id)
     video.frames_total = sampled_total
@@ -52,7 +56,10 @@ def extract_track(video_path: Path, video_id: int, db):
 
     frames = []
     sig_frames = []
-    with mp_pose.Pose(model_complexity=1, min_detection_confidence=0.5) as pose:
+    with mp_pose.Pose(
+        model_complexity=settings.pose_model_complexity,
+        min_detection_confidence=0.5,
+    ) as pose:
         idx = 0
         done = 0
         while True:
@@ -103,6 +110,7 @@ def generate_thumbnails(video_path: Path, video_id: int, segs: list[dict]) -> No
     the boundary) - segment n's file is named by its position, matching how
     /1/segments is ordered by start_sec in the admin/watch templates."""
     out_dir = THUMBS_DIR / str(video_id)
+    shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True, exist_ok=True)
     cap = cv2.VideoCapture(str(video_path))
     for s in segs:
@@ -115,22 +123,53 @@ def generate_thumbnails(video_path: Path, video_id: int, segs: list[dict]) -> No
 
 
 def process_video(video_id: int) -> None:
+    """Serialize the in-process queue so pending videos wait their turn."""
+    with _PROCESS_LOCK:
+        _process_video(video_id)
+
+
+def resume_interrupted_processing() -> int:
+    """Resume queued work and restart jobs interrupted by a process shutdown."""
+    db = SessionLocal()
+    queued_ids = []
+    try:
+        videos = (
+            db.query(Video)
+            .filter(Video.status.in_([VideoStatus.pending, VideoStatus.processing]))
+            .order_by(Video.created_at, Video.id)
+            .all()
+        )
+        for video in videos:
+            if not Path(video.filename).is_file():
+                video.status = VideoStatus.failed
+                video.error = "Исходный видеофайл не найден после перезапуска."
+                continue
+            video.status = VideoStatus.pending
+            video.error = None
+            video.frames_total = None
+            video.frames_done = None
+            queued_ids.append(video.id)
+        db.commit()
+    finally:
+        db.close()
+
+    for video_id in queued_ids:
+        process_video(video_id)
+    return len(queued_ids)
+
+
+def _process_video(video_id: int) -> None:
     db = SessionLocal()
     try:
         video = db.get(Video, video_id)
-        if video is None:
+        if video is None or video.status not in (VideoStatus.pending, VideoStatus.processing):
             return
         video.status = VideoStatus.processing
+        video.error = None
         db.commit()
 
         video_path = Path(video.filename)
-        try:
-            frames, sig_frames, duration, fps = extract_track(video_path, video_id, db)
-        except Exception as exc:  # noqa: BLE001 - surface to admin UI
-            video.status = VideoStatus.failed
-            video.error = str(exc)
-            db.commit()
-            return
+        frames, sig_frames, duration, fps = extract_track(video_path, video_id, db)
 
         track_path = TRACKS_DIR / f"{video.id}.json"
         # separators=(",", ":") - no spaces, matters at this size
@@ -138,9 +177,14 @@ def process_video(video_id: int) -> None:
 
         segs = sig.segment_video(sig_frames, duration)
         db.query(Segment).filter(Segment.video_id == video.id).delete()
-        for s in segs:
-            label = f"упражнение {s['n']}" if len(segs) > 1 else "упражнение"
-            db.add(Segment(video_id=video.id, start_sec=s["start"], end_sec=s["end"], label=label))
+        for segment in segs:
+            label = f"упражнение {segment['n']}" if len(segs) > 1 else "упражнение"
+            db.add(Segment(
+                video_id=video.id,
+                start_sec=segment["start"],
+                end_sec=segment["end"],
+                label=label,
+            ))
 
         generate_thumbnails(video_path, video_id, segs)
 
@@ -149,5 +193,12 @@ def process_video(video_id: int) -> None:
         video.track_path = str(track_path.relative_to(TRACKS_DIR.parent))
         video.status = VideoStatus.done
         db.commit()
+    except Exception as exc:  # noqa: BLE001 - surface every pipeline failure to admin UI
+        db.rollback()
+        video = db.get(Video, video_id)
+        if video is not None:
+            video.status = VideoStatus.failed
+            video.error = str(exc)
+            db.commit()
     finally:
         db.close()

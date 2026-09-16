@@ -30,27 +30,43 @@
       <i data-lucide="layout-grid" class="w-4 h-4 shrink-0"></i>
       Видео
     </a>
-    <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[#5a5e66] cursor-default">
+    {% if request.state.principal.role in ["owner", "manager"] %}
+    <a href="/students" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'students' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
+      <i data-lucide="graduation-cap" class="w-4 h-4 shrink-0"></i>
+      Ученики
+    </a>
+    {% endif %}
+    <a href="/exercises" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'exercises' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
+      <i data-lucide="dumbbell" class="w-4 h-4 shrink-0"></i>
+      Упражнения
+    </a>
+    <a href="/notifications" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'notifications' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
+      <i data-lucide="bell" class="w-4 h-4 shrink-0"></i>
+      <span class="flex-1">Уведомления</span>
+      {% if request.state.principal.unread_notifications %}<span class="min-w-5 rounded-full bg-violet-500 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white">{{ request.state.principal.unread_notifications if request.state.principal.unread_notifications < 100 else '99+' }}</span>{% endif %}
+    </a>
+    {% if request.state.principal.role == "owner" %}
+    <a href="/team" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'team' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
       <i data-lucide="users" class="w-4 h-4 shrink-0"></i>
       Команда
     </a>
-    <a href="#" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[#5a5e66] cursor-default">
+    <a href="/settings" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md {{ 'bg-violet-500/15 text-violet-400 font-medium' if active == 'settings' else 'text-[#8a8f98] hover:bg-white/5 hover:text-[#f7f8f8]' }}">
       <i data-lucide="settings" class="w-4 h-4 shrink-0"></i>
       Настройки
     </a>
+    {% endif %}
   </nav>
 
-  <div class="mt-auto px-4 pt-4">
-    <div class="text-[11px] text-[#5a5e66]">Хранилище</div>
-    <div class="h-1.5 rounded-full bg-white/10 mt-1.5 overflow-hidden">
-      <div class="h-full bg-violet-500" style="width: 22%"></div>
-    </div>
-    <div class="flex items-center gap-2 mt-4 pt-4 border-t border-[#1f2023]">
-      <div class="w-7 h-7 rounded-full bg-[#2a2c30] text-[#f7f8f8] text-xs flex items-center justify-center font-medium">RB</div>
-      <div class="text-xs">
-        <div class="text-[#f7f8f8] font-medium">Roman</div>
-        <div class="text-[#5a5e66]">Admin</div>
+  <div class="mt-auto px-3 pt-4">
+    <div class="flex items-center gap-2 pt-4 border-t border-[#1f2023]">
+      <div class="w-7 h-7 rounded-full bg-[#2a2c30] text-[#f7f8f8] text-xs flex items-center justify-center font-medium">{{ request.state.principal.name[:2]|upper }}</div>
+      <div class="text-xs min-w-0 flex-1">
+        <div class="text-[#f7f8f8] font-medium truncate">{{ request.state.principal.name }}</div>
+        <div class="text-[#5a5e66]">{{ {"owner": "Владелец", "manager": "Управляющий", "editor": "Редактор"}[request.state.principal.role] }}</div>
       </div>
+      <form action="/auth/logout" method="post">
+        <button aria-label="Выйти" class="p-1.5 text-[#5a5e66] hover:text-[#f7f8f8]"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+      </form>
     </div>
   </div>
 </aside>
@@ -58,13 +74,37 @@
 <div class="flex-1 min-w-0 flex flex-col bg-slate-50">
   <header class="h-14 border-b border-slate-200 flex items-center justify-between px-6 gap-4 bg-white">
     <div class="flex items-center gap-1.5 text-sm text-slate-500 min-w-0">
+      {% if active == "notifications" %}
+      <span class="text-slate-900 font-medium">Уведомления</span>
+      {% elif active == "team" %}
+      <span class="text-slate-900 font-medium">Команда</span>
+      {% elif active == "students" %}
+      <a href="/students" class="hover:text-slate-900 shrink-0">Ученики</a>
+      {% block student_breadcrumb %}{% endblock %}
+      {% elif active == "exercises" %}
+      <span class="text-slate-900 font-medium">Упражнения</span>
+      {% elif active == "settings" %}
+      <span class="text-slate-900 font-medium">Настройки</span>
+      {% else %}
       <a href="/" class="hover:text-slate-900 shrink-0">Видео</a>
       {% block breadcrumb %}{% endblock %}
+      {% endif %}
     </div>
-    <div class="flex items-center gap-3 shrink-0">
-      <input type="search" placeholder="Поиск…"
-             class="hidden sm:block text-sm bg-slate-50 border border-slate-200 rounded-md px-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-violet-200">
-    </div>
+    {% if active == "videos" %}
+    <form action="/" method="get" class="hidden sm:flex items-center gap-1.5 shrink-0">
+      <label for="video-search" class="sr-only">Поиск видео</label>
+      <div class="relative">
+        <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400"></i>
+        <input id="video-search" name="q" type="search" value="{{ q|default('') }}" placeholder="Поиск видео…"
+               class="text-sm bg-slate-50 border border-slate-200 rounded-md pl-8 pr-3 py-1.5 w-56 focus:outline-none focus:ring-2 focus:ring-violet-200">
+      </div>
+      {% if q %}
+      <a href="/" aria-label="Сбросить поиск" class="p-1.5 text-slate-400 hover:text-slate-700">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </a>
+      {% endif %}
+    </form>
+    {% endif %}
   </header>
 
   <main class="flex-1 px-6 py-6 min-w-0">
@@ -72,6 +112,17 @@
   </main>
 </div>
 
-<script>lucide.createIcons();</script>
+<script>
+  const csrfToken = {{ request.state.csrf_token|tojson }};
+  document.querySelectorAll('form[method="post"]').forEach((form) => {
+    if (form.querySelector('input[name="csrf_token"]')) return;
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'csrf_token';
+    input.value = csrfToken;
+    form.appendChild(input);
+  });
+  lucide.createIcons();
+</script>
 </body>
 </html>
