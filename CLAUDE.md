@@ -109,14 +109,17 @@ ssh zaurus 'pct exec 169 -- sh -lc "cd /opt/omra.fitness/server && docker compos
 - Ядро этапа 4 реализовано: `/` — публичный Jinja/Tailwind-лендинг, кабинет тренера
   перенесён на `/app`, форма пилота создаёт lead/deal через company-scoped
   `CRM_PILOT_API_KEY`, доступны metadata, canonical, `robots.txt` и sitemap.
+- Production `https://omra.fitness/` обновлён на `295e9ee`: миграции дошли до
+  `f8c1a4b6d902`, `/app` закрыт OIDC, pilot lead intake направлен в компанию
+  `OMRA.Products` в `omra.crm`.
 - Актуальная миграция Fitness: `f8c1a4b6d902`; локальная Postgres на head.
 - Последняя проверка Fitness: 29 tests passed. Browser smoke проверил landing на
   1440×1000 и 390×844 без horizontal overflow, кабинет и video detail под `/app`;
   cross-service submit создал корректно атрибутированные lead/deal в `omra.crm`.
 - Незакрытый gate этапа 3: реальный Telegram round trip. В локальном `omra.crm` нет
   рабочего Telegram agent/session; тестовые `telegram_user` agents имеют пустой config
-  и невалидные session keys. До production-публикации заменить схематичный блок лендинга
-  реальными desktop/mobile материалами после provider smoke.
+  и невалидные session keys. Опубликованный лендинг пока использует схематичный экран;
+  после provider smoke заменить его реальными desktop/mobile материалами.
 - Задачи следующей сессии ведутся в `ROADMAP.md` → «Бэклог на завтра».
 
 ## Общие правила проекта (см. также `~/.claude/CLAUDE.md`)
